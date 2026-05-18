@@ -48,6 +48,29 @@ This creates:
 The DF2K photo manifest should contain 3,550 rows total: 800 DIV2K train, 100
 DIV2K validation, and 2,650 Flickr2K training images.
 
+## 10k Photo Expansion
+
+The current larger photo training manifest adds a deterministic subset of COCO
+train2017 to DF2K:
+
+```bash
+python scripts/download_coco2017.py \
+  --target-count 6550 \
+  --min-size 480
+python scripts/merge_manifests.py \
+  --inputs \
+    /home/jwheojjang/scratch/sr-diffusion/data/manifest_df2k_photo.csv \
+    /home/jwheojjang/scratch/sr-diffusion/data/manifest_coco2017_photo.csv \
+  --output /home/jwheojjang/scratch/sr-diffusion/data/manifest_photo10k.csv
+```
+
+Expected count: 10,000 photo training images plus the 100 DIV2K validation
+images that remain in the merged manifest.
+
+COCO images have varied original licenses because the images come from Flickr.
+Keep this dataset path for study/research experiments and do not redistribute
+the downloaded images from this repository.
+
 ## Scaling Photo Data
 
 Good next candidates:

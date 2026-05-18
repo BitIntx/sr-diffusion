@@ -41,19 +41,19 @@ scratch layout and development datasets with:
 bash scripts/recover_scratch.sh
 ```
 
-That recreates directories, the toy dataset, DIV2K, Flickr2K, and the combined
-DF2K manifest. Add `--smoke` if you also want a 1-step training check after
-recovery.
+That recreates directories, the toy dataset, DIV2K, Flickr2K, a COCO train2017
+subset, and the combined 10k photo manifest. Add `--smoke` if you also want a
+1-step training check after recovery.
 
-To recover only the smaller DIV2K seed dataset, skip Flickr2K:
+To recover only the smaller DIV2K seed dataset, skip Flickr2K and COCO:
 
 ```bash
-bash scripts/recover_scratch.sh --skip-flickr2k
+bash scripts/recover_scratch.sh --skip-flickr2k --skip-coco
 ```
 
 The default recovery creates
-`/home/jwheojjang/scratch/sr-diffusion/data/manifest_df2k_photo.csv` for
-[configs/autoencoder_df2k.yaml](configs/autoencoder_df2k.yaml).
+`/home/jwheojjang/scratch/sr-diffusion/data/manifest_photo10k.csv` for
+[configs/autoencoder_photo10k.yaml](configs/autoencoder_photo10k.yaml).
 
 Expected real dataset layout:
 
@@ -95,6 +95,12 @@ Train a tiny autoencoder for a few steps:
 
 ```bash
 python train_autoencoder.py --config configs/autoencoder_tiny.yaml --limit-steps 10
+```
+
+Train the current 10k photo autoencoder run:
+
+```bash
+python train_autoencoder.py --config configs/autoencoder_photo10k.yaml
 ```
 
 Reconstruct one image:

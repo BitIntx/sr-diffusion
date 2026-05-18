@@ -6,8 +6,11 @@ SCRATCH="${SRD_SCRATCH:-/home/jwheojjang/scratch}"
 SCRATCH_PROJECT="${SRD_SCRATCH_PROJECT:-${SCRATCH}/sr-diffusion}"
 DO_DIV2K=1
 DO_FLICKR2K=1
+DO_COCO=1
 DO_TOY=1
 RUN_SMOKE=0
+COCO_TARGET_COUNT=6550
+COCO_MIN_SIZE=480
 
 usage() {
   cat <<'EOF'
@@ -20,6 +23,9 @@ Options:
   --skip-div2k      Do not download/extract DIV2K.
   --skip-flickr2k   Do not download/extract Flickr2K or build DF2K manifest.
   --flickr2k        Kept for compatibility; Flickr2K is enabled by default.
+  --skip-coco       Do not download/extract COCO or build the photo10k manifest.
+  --coco-count N    Number of COCO training images to add. Default: 6550.
+  --coco-min-size N Minimum short-side size for COCO images. Default: 480.
   --skip-toy        Do not recreate the toy dataset.
   --smoke           Run a 1-step scratch tiny training smoke test.
   -h, --help        Show this help.
@@ -49,6 +55,18 @@ while [[ $# -gt 0 ]]; do
       DO_FLICKR2K=0
       shift
       ;;
+    --skip-coco)
+      DO_COCO=0
+      shift
+      ;;
+    --coco-count)
+      COCO_TARGET_COUNT="$2"
+      shift 2
+      ;;
+    --coco-min-size)
+      COCO_MIN_SIZE="$2"
+      shift 2
+      ;;
     --skip-toy)
       DO_TOY=0
       shift
@@ -71,7 +89,7 @@ done
 
 cd "${ROOT_DIR}"
 
-echo "[1/6] mount/check scratch"
+echo "[1/7] mount/check scratch"
 bash scripts/mount_doscratch.sh "${SCRATCH}"
 
 mkdir -p \
@@ -85,21 +103,21 @@ mkdir -p \
 touch "${SCRATCH_PROJECT}/.write_test"
 rm -f "${SCRATCH_PROJECT}/.write_test"
 
-echo "[2/6] scratch layout"
+echo "[2/7] scratch layout"
 df -hT "${SCRATCH}"
 findmnt "${SCRATCH}" || true
 
 if [[ "${DO_TOY}" -eq 1 ]]; then
-  echo "[3/6] recreate toy dataset"
+  echo "[3/7] recreate toy dataset"
   python scripts/make_toy_dataset.py \
     --output "${SCRATCH_PROJECT}/data/toy" \
     --count 16
 else
-  echo "[3/6] skip toy dataset"
+  echo "[3/7] skip toy dataset"
 fi
 
 if [[ "${DO_DIV2K}" -eq 1 ]]; then
-  echo "[4/6] recover DIV2K HR dataset"
+  echo "[4/7] recover DIV2K HR dataset"
   python scripts/download_div2k.py \
     --output-dir "${SCRATCH_PROJECT}/datasets/photo/div2k" \
     --manifest "${SCRATCH_PROJECT}/data/manifest_div2k_photo.csv"
@@ -107,11 +125,11 @@ if [[ "${DO_DIV2K}" -eq 1 ]]; then
     --manifest "${SCRATCH_PROJECT}/data/manifest_div2k_photo.csv" \
     --limit 20
 else
-  echo "[4/6] skip DIV2K"
+  echo "[4/7] skip DIV2K"
 fi
 
 if [[ "${DO_FLICKR2K}" -eq 1 ]]; then
-  echo "[5/6] recover Flickr2K HR dataset and DF2K manifest"
+  echo "[5/7] recover Flickr2K HR dataset and DF2K manifest"
   python scripts/download_flickr2k.py \
     --output-dir "${SCRATCH_PROJECT}/datasets/photo/flickr2k" \
     --manifest "${SCRATCH_PROJECT}/data/manifest_flickr2k_photo.csv"
@@ -124,16 +142,35 @@ if [[ "${DO_FLICKR2K}" -eq 1 ]]; then
     --manifest "${SCRATCH_PROJECT}/data/manifest_df2k_photo.csv" \
     --limit 20
 else
-  echo "[5/6] skip Flickr2K/DF2K"
+  echo "[5/7] skip Flickr2K/DF2K"
+fi
+
+if [[ "${DO_COCO}" -eq 1 ]]; then
+  echo "[6/7] recover COCO train2017 subset and photo10k manifest"
+  python scripts/download_coco2017.py \
+    --output-dir "${SCRATCH_PROJECT}/datasets/photo/coco2017" \
+    --manifest "${SCRATCH_PROJECT}/data/manifest_coco2017_photo.csv" \
+    --target-count "${COCO_TARGET_COUNT}" \
+    --min-size "${COCO_MIN_SIZE}"
+  python scripts/merge_manifests.py \
+    --inputs \
+      "${SCRATCH_PROJECT}/data/manifest_df2k_photo.csv" \
+      "${SCRATCH_PROJECT}/data/manifest_coco2017_photo.csv" \
+    --output "${SCRATCH_PROJECT}/data/manifest_photo10k.csv"
+  python scripts/dataset_report.py \
+    --manifest "${SCRATCH_PROJECT}/data/manifest_photo10k.csv" \
+    --limit 20
+else
+  echo "[6/7] skip COCO/photo10k"
 fi
 
 if [[ "${RUN_SMOKE}" -eq 1 ]]; then
-  echo "[6/6] run scratch smoke train"
+  echo "[7/7] run scratch smoke train"
   python train_autoencoder.py \
     --config configs/autoencoder_scratch_tiny.yaml \
     --limit-steps 1
 else
-  echo "[6/6] skip smoke train"
+  echo "[7/7] skip smoke train"
 fi
 
 cat <<EOF
@@ -146,7 +183,8 @@ Data root:
 Photo manifests:
   DIV2K: ${SCRATCH_PROJECT}/data/manifest_div2k_photo.csv
   DF2K:  ${SCRATCH_PROJECT}/data/manifest_df2k_photo.csv
+  10k:   ${SCRATCH_PROJECT}/data/manifest_photo10k.csv
 
 Next train command:
-  python train_autoencoder.py --config configs/autoencoder_df2k.yaml
+  python train_autoencoder.py --config configs/autoencoder_photo10k.yaml
 EOF
