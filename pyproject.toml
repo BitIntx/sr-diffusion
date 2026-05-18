@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sr-diffusion"
+version = "0.1.0"
+description = "Vision-only latent diffusion super-resolution experiments."
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",
+  "pillow",
+  "pyyaml",
+  "torch",
+  "torchvision",
+  "wandb",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,65 @@
+presets:
+  clean:
+    blur_prob: 0.0
+    gaussian_noise_prob: 0.0
+    poisson_noise_prob: 0.0
+    jpeg_prob: 0.0
+    webp_prob: 0.0
+    color_prob: 0.0
+    sharpen_prob: 0.0
+    anime_line_prob: 0.0
+    banding_prob: 0.0
+
+  mild:
+    blur_prob: 0.35
+    blur_radius: [0.1, 1.2]
+    gaussian_noise_prob: 0.25
+    gaussian_sigma: [0.0, 4.0]
+    poisson_noise_prob: 0.05
+    jpeg_prob: 0.35
+    jpeg_quality: [70, 98]
+    webp_prob: 0.1
+    webp_quality: [70, 98]
+    color_prob: 0.2
+    color_jitter: [0.94, 1.06]
+    sharpen_prob: 0.1
+    sharpen_factor: [0.8, 1.4]
+    anime_line_prob: 0.0
+    banding_prob: 0.05
+    banding_levels: [32, 128]
+
+  heavy:
+    blur_prob: 0.65
+    blur_radius: [0.2, 2.4]
+    gaussian_noise_prob: 0.45
+    gaussian_sigma: [0.0, 9.0]
+    poisson_noise_prob: 0.15
+    jpeg_prob: 0.55
+    jpeg_quality: [45, 92]
+    webp_prob: 0.25
+    webp_quality: [45, 92]
+    color_prob: 0.35
+    color_jitter: [0.88, 1.12]
+    sharpen_prob: 0.25
+    sharpen_factor: [0.7, 1.8]
+    anime_line_prob: 0.0
+    banding_prob: 0.15
+    banding_levels: [16, 96]
+
+  anime:
+    blur_prob: 0.25
+    blur_radius: [0.05, 0.8]
+    gaussian_noise_prob: 0.15
+    gaussian_sigma: [0.0, 3.0]
+    poisson_noise_prob: 0.0
+    jpeg_prob: 0.25
+    jpeg_quality: [65, 98]
+    webp_prob: 0.15
+    webp_quality: [65, 98]
+    color_prob: 0.15
+    color_jitter: [0.95, 1.05]
+    sharpen_prob: 0.15
+    sharpen_factor: [0.8, 1.5]
+    anime_line_prob: 0.25
+    banding_prob: 0.2
+    banding_levels: [24, 96]
