@@ -1,6 +1,9 @@
 # sr-diffusion
 
+[![Technical Report](https://img.shields.io/badge/technical_report-PDF-blue)](paper/sr_diffusion_report.pdf)
+
 Vision-only x4 latent diffusion super-resolution experiments.
+Report source: [paper/main.tex](paper/main.tex).
 
 This project is for study/research. The goal is to train an SR model directly,
 without using a pretrained text-to-image diffusion model. The intended final

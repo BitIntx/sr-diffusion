@@ -1,0 +1,106 @@
+\documentclass[10pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+
+\title{Vision-Only Latent Diffusion Super-Resolution without T2I Pretraining}
+\author{sr-diffusion contributors}
+\date{Work-in-progress technical report}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report describes a work-in-progress x4 super-resolution project. The goal
+is to train a vision-only latent diffusion SR model directly, without importing a
+pretrained text-to-image diffusion backbone. The current implementation is in
+Stage 1: learning a factor-4 VAE/autoencoder on 512px HR crops so later stages
+can train in latent space.
+\end{abstract}
+
+\section{Objective}
+
+The target task is x4 restoration from low-resolution inputs:
+\[
+128 \times 128 \rightarrow 512 \times 512
+\]
+with a later extension to
+\[
+192 \times 192 \rightarrow 768 \times 768.
+\]
+The intended model should support photo and anime/illustration domains in one
+model through explicit domain conditioning.
+
+\section{Planned Method}
+
+The planned pipeline is:
+\[
+\mathrm{HR\ image} \rightarrow \mathrm{VAE} \rightarrow \mathrm{HR\ latent}.
+\]
+During SR training, a degraded LR image is encoded by a condition encoder. A
+conditional diffusion U-Net then denoises HR latents using LR features, timestep
+embeddings, and domain embeddings. The VAE decoder maps the final latent back to
+the x4 HR output.
+
+\section{Current Implementation}
+
+The repository currently implements the Stage 0--1 foundation:
+\begin{itemize}
+  \item manifest-based photo/anime dataset loading,
+  \item on-the-fly x4 degradation,
+  \item factor-4 AutoencoderKL,
+  \item PyTorch/ROCm training with bf16 autocast,
+  \item W\&B online logging,
+  \item fixed validation sample logging for LR, GT, and HR reconstruction,
+  \item validation metrics for loss, reconstruction, KL, MSE, and PSNR.
+\end{itemize}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Item & Current value \\
+\midrule
+Training data & 10,000 photo images \\
+Validation data & 100 photo images \\
+Input crop & 512px HR \\
+Latent size & 128px, 16 channels \\
+Batch size & 16 \\
+Max steps & 100,000 \\
+Eval cadence & Every 1,000 steps \\
+Sample cadence & Every 500 steps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Evaluation}
+
+Current evaluation is for the VAE only:
+\[
+\mathrm{HR} \rightarrow \mathrm{encode} \rightarrow \mathrm{decode}
+\rightarrow \mathrm{reconstruction}.
+\]
+The validation set is fixed, and visual samples are also fixed so that W\&B
+comparisons show real progress over time rather than different random crops.
+
+\section{Roadmap}
+
+\begin{enumerate}
+  \item Stage 1: finish and select the VAE checkpoint.
+  \item Stage 2: train deterministic LR-to-HR-latent pretraining.
+  \item Stage 3: train conditional latent diffusion for SR.
+  \item Stage 4: add perceptual/GAN fine-tuning if needed.
+  \item Stage 5: distill to fewer inference steps.
+  \item Stage 6: evaluate checkpoints with fixed A/B preference tests.
+\end{enumerate}
+
+\section{Limitations}
+
+This is not yet a complete SR diffusion model. The current training run only
+learns the VAE reconstruction model. Anime/illustration data has not yet been
+added to the active 10k training set, and no claim is made that this is a novel
+published method. This is a practical engineering report for an active
+experiment.
+
+\end{document}

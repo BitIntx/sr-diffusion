@@ -1,0 +1,101 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 2038 >>
+stream
+BT /F1 15 Tf 72 760 Td (Vision-Only Latent Diffusion Super-Resolution without T2I Pretraining) Tj ET
+BT /F1 10 Tf 72 740 Td (Work-in-progress technical report) Tj ET
+BT /F1 10 Tf 72 725 Td () Tj ET
+BT /F1 13 Tf 72 710 Td (Abstract) Tj ET
+BT /F1 10 Tf 72 690 Td (This project trains an x4 super-resolution model directly, without importing) Tj ET
+BT /F1 10 Tf 72 675 Td (a pretrained text-to-image diffusion backbone. The active implementation is) Tj ET
+BT /F1 10 Tf 72 660 Td (Stage 1: a factor-4 VAE / autoencoder trained on 512px HR crops so later) Tj ET
+BT /F1 10 Tf 72 645 Td (stages can operate in latent space.) Tj ET
+BT /F1 10 Tf 72 630 Td () Tj ET
+BT /F1 13 Tf 72 615 Td (Goal) Tj ET
+BT /F1 10 Tf 72 595 Td (- LR 128x128 -> HR 512x512.) Tj ET
+BT /F1 10 Tf 72 580 Td (- LR 192x192 -> HR 768x768 later.) Tj ET
+BT /F1 10 Tf 72 565 Td (- One future model for photo and anime/illustration domains through domain conditioning.) Tj ET
+BT /F1 10 Tf 72 550 Td (- PyTorch/ROCm first, no custom CUDA/ROCm ops.) Tj ET
+BT /F1 10 Tf 72 535 Td () Tj ET
+BT /F1 13 Tf 72 520 Td (Planned Pipeline) Tj ET
+BT /F1 10 Tf 72 500 Td (HR image -> factor-4 VAE -> HR latent.) Tj ET
+BT /F1 10 Tf 72 485 Td (LR image -> condition encoder -> multi-scale LR features.) Tj ET
+BT /F1 10 Tf 72 470 Td (Noisy HR latent + LR features + timestep + domain embedding -> diffusion U-Net.) Tj ET
+BT /F1 10 Tf 72 455 Td (The VAE decoder maps the final denoised latent back to the x4 HR output.) Tj ET
+BT /F1 10 Tf 72 440 Td () Tj ET
+BT /F1 13 Tf 72 425 Td (Current Implementation) Tj ET
+BT /F1 10 Tf 72 405 Td (- Manifest dataset loader with photo/anime domain IDs.) Tj ET
+BT /F1 10 Tf 72 390 Td (- On-the-fly x4 degradation pipeline.) Tj ET
+BT /F1 10 Tf 72 375 Td (- Factor-4 AutoencoderKL.) Tj ET
+BT /F1 10 Tf 72 360 Td (- bf16 PyTorch/ROCm training.) Tj ET
+BT /F1 10 Tf 72 345 Td (- W&B online logging.) Tj ET
+BT /F1 10 Tf 72 330 Td (- Fixed LR / GT / HR validation image logging.) Tj ET
+BT /F1 10 Tf 72 315 Td (- Validation metrics: loss, recon, KL, MSE, PSNR.) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 2156 >>
+stream
+BT /F1 13 Tf 72 760 Td (Current Training Run) Tj ET
+BT /F1 10 Tf 72 740 Td (- Config: configs/autoencoder_photo10k.yaml.) Tj ET
+BT /F1 10 Tf 72 725 Td (- Run: autoencoder_photo10k_b16_eval_online.) Tj ET
+BT /F1 10 Tf 72 710 Td (- Training data: 10,000 photo images.) Tj ET
+BT /F1 10 Tf 72 695 Td (- Validation data: 100 photo images.) Tj ET
+BT /F1 10 Tf 72 680 Td (- HR crop: 512px.) Tj ET
+BT /F1 10 Tf 72 665 Td (- Latent: 128px, 16 channels.) Tj ET
+BT /F1 10 Tf 72 650 Td (- Batch size: 16.) Tj ET
+BT /F1 10 Tf 72 635 Td (- Max steps: 100,000, about 160 epochs.) Tj ET
+BT /F1 10 Tf 72 620 Td (- Eval cadence: every 1,000 steps.) Tj ET
+BT /F1 10 Tf 72 605 Td (- Fixed sample cadence: every 500 steps.) Tj ET
+BT /F1 10 Tf 72 590 Td () Tj ET
+BT /F1 13 Tf 72 575 Td (Evaluation) Tj ET
+BT /F1 10 Tf 72 555 Td (The current evaluation is VAE-only: HR -> encode -> decode -> reconstruction.) Tj ET
+BT /F1 10 Tf 72 540 Td (Fixed validation samples are logged so visual progress is comparable over time.) Tj ET
+BT /F1 10 Tf 72 525 Td (The best checkpoint is selected by eval/recon, with PSNR and sample quality as) Tj ET
+BT /F1 10 Tf 72 510 Td (supporting signals.) Tj ET
+BT /F1 10 Tf 72 495 Td () Tj ET
+BT /F1 13 Tf 72 480 Td (Roadmap) Tj ET
+BT /F1 10 Tf 72 460 Td (1. Finish Stage 1 VAE training and choose a checkpoint.) Tj ET
+BT /F1 10 Tf 72 445 Td (2. Train deterministic LR -> HR latent pretraining.) Tj ET
+BT /F1 10 Tf 72 430 Td (3. Train conditional latent diffusion for SR.) Tj ET
+BT /F1 10 Tf 72 415 Td (4. Add perceptual/GAN fine-tuning if needed.) Tj ET
+BT /F1 10 Tf 72 400 Td (5. Distill to fewer inference steps.) Tj ET
+BT /F1 10 Tf 72 385 Td (6. Evaluate checkpoints with fixed A/B preference tests.) Tj ET
+BT /F1 10 Tf 72 370 Td () Tj ET
+BT /F1 13 Tf 72 355 Td (Limitations) Tj ET
+BT /F1 10 Tf 72 335 Td (This is not yet a complete SR diffusion model. The current active run trains) Tj ET
+BT /F1 10 Tf 72 320 Td (only the VAE reconstruction model. Anime/illustration data has not yet been) Tj ET
+BT /F1 10 Tf 72 305 Td (added to the active training set, and this report does not claim a novel) Tj ET
+BT /F1 10 Tf 72 290 Td (published method.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000002281 00000 n 
+0000002407 00000 n 
+0000004615 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+4741
+%%EOF
