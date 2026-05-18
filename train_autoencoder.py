@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from sr_diffusion.datasets import ManifestImageDataset
+from sr_diffusion.eval import evaluate_autoencoder, make_eval_loader, save_eval_metrics
 from sr_diffusion.losses import vae_loss
 from sr_diffusion.models import AutoencoderKL
 from sr_diffusion.utils import autocast_context, get_device, load_config, save_config, seed_everything, seed_worker
@@ -169,6 +170,7 @@ def main() -> None:
     output_dir = Path(config["project"]["output_dir"])
     checkpoints_dir = output_dir / "checkpoints"
     samples_dir = output_dir / "samples"
+    eval_dir = output_dir / "eval"
     output_dir.mkdir(parents=True, exist_ok=True)
     samples_dir.mkdir(parents=True, exist_ok=True)
     save_config(config, output_dir / "config.yaml")
@@ -199,6 +201,26 @@ def main() -> None:
         generator=generator,
         drop_last=True,
     )
+    eval_cfg = config.get("eval", {})
+    eval_enabled = bool(eval_cfg.get("enabled", False))
+    eval_loader = None
+    eval_every = int(eval_cfg.get("every", 1000))
+    eval_run_at_start = bool(eval_cfg.get("run_at_start", True))
+    if eval_enabled:
+        eval_loader = make_eval_loader(
+            config,
+            split=str(eval_cfg.get("split", "val")),
+            seed=seed,
+            batch_size=int(eval_cfg.get("batch_size", train_cfg.get("batch_size", 1))),
+            limit=int(eval_cfg.get("limit", 0)),
+            num_workers=int(eval_cfg.get("num_workers", config["data"].get("num_workers", 0))),
+        )
+        print(
+            "eval="
+            f"split={eval_cfg.get('split', 'val')} "
+            f"limit={eval_cfg.get('limit', 0)} "
+            f"batch_size={eval_cfg.get('batch_size', train_cfg.get('batch_size', 1))}"
+        )
 
     model = AutoencoderKL.from_config(config["model"]).to(device)
     if bool(train_cfg.get("compile", False)):
@@ -234,6 +256,7 @@ def main() -> None:
 
     model.train()
     step = start_step
+    best_eval_recon = float("inf")
     last_log = time.time()
     last_log_step = step
     optimizer.zero_grad(set_to_none=True)
@@ -282,6 +305,32 @@ def main() -> None:
                     },
                     step=step,
                 )
+
+            should_eval = (
+                eval_enabled
+                and eval_loader is not None
+                and eval_every > 0
+                and (step % eval_every == 0 or (step == 1 and eval_run_at_start))
+            )
+            if should_eval:
+                eval_metrics = evaluate_autoencoder(
+                    model,
+                    eval_loader,
+                    device,
+                    dtype_name,
+                    config["loss"],
+                )
+                save_eval_metrics(eval_dir / f"step_{step:07d}_metrics.json", step=step, metrics=eval_metrics)
+                print(
+                    f"eval step={step} "
+                    f"recon={eval_metrics['eval/recon']:.5f} "
+                    f"kl={eval_metrics['eval/kl']:.5f} "
+                    f"psnr={eval_metrics['eval/psnr']:.2f}"
+                )
+                wandb_log(run, eval_metrics, step=step)
+                if eval_metrics["eval/recon"] < best_eval_recon:
+                    best_eval_recon = eval_metrics["eval/recon"]
+                    save_checkpoint(checkpoints_dir / "best_eval_recon.pt", model, optimizer, step, config)
 
             if step % sample_every == 0 or step == 1:
                 with torch.no_grad():

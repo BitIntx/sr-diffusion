@@ -1,15 +1,15 @@
 project:
-  name: autoencoder_photo10k_b16_lrgthr_online
-  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_lrgthr_online
+  name: autoencoder_photo10k_b16_eval_online
+  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online
 
 logging:
   wandb:
     enabled: true
     project: sr-diffusion
-    name: autoencoder_photo10k_b16_lrgthr_online
+    name: autoencoder_photo10k_b16_eval_online
     mode: online
     dir: /home/jwheojjang/scratch/sr-diffusion/wandb
-    tags: [autoencoder, photo10k, photo, b16, lrgthr]
+    tags: [autoencoder, photo10k, photo, b16, fixed-samples, eval]
     watch: false
   samples:
     enabled: true
@@ -53,6 +53,15 @@ train:
   save_every: 1000
   sample_every: 500
   compile: false
+
+eval:
+  enabled: true
+  split: val
+  limit: 100
+  batch_size: 16
+  num_workers: 4
+  every: 1000
+  run_at_start: true
 
 loss:
   reconstruction: charbonnier
