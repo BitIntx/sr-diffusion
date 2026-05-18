@@ -7,7 +7,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
+import torch.nn.functional as F
+from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
@@ -30,6 +33,63 @@ def parse_args() -> argparse.Namespace:
 
 def denormalize(x: torch.Tensor) -> torch.Tensor:
     return ((x + 1.0) * 0.5).clamp(0.0, 1.0)
+
+
+def tensor_to_pil(image: torch.Tensor) -> Image.Image:
+    image = image.detach().float().cpu().clamp(0.0, 1.0)
+    array = image.permute(1, 2, 0).numpy()
+    array = np.round(array * 255.0).astype(np.uint8)
+    return Image.fromarray(array)
+
+
+def make_dataset_for_split(config: dict[str, Any], split: str, seed: int) -> ManifestImageDataset:
+    data_config = config["data"]
+    return ManifestImageDataset(
+        manifest_path=data_config["manifest"],
+        split=split,
+        hr_size=data_config.get("hr_size", 512),
+        scale=data_config.get("scale", 4),
+        domains=data_config.get("domains", {"photo": 0, "anime": 1}),
+        degradation_preset=data_config.get("degradation_preset", "mild"),
+        seed=seed,
+        deterministic=True,
+    )
+
+
+def make_fixed_sample_batch(config: dict[str, Any], seed: int) -> dict[str, Any] | None:
+    sample_config = config.get("logging", {}).get("samples", {})
+    if not bool(sample_config.get("enabled", True)):
+        return None
+
+    count = int(sample_config.get("count", 4))
+    if count <= 0:
+        return None
+
+    split = str(sample_config.get("split", "val"))
+    fallback_split = str(sample_config.get("fallback_split", "train"))
+    try:
+        dataset = make_dataset_for_split(config, split=split, seed=seed)
+    except ValueError:
+        if split == fallback_split:
+            raise
+        print(f"sample split '{split}' is empty; falling back to '{fallback_split}'")
+        split = fallback_split
+        dataset = make_dataset_for_split(config, split=split, seed=seed)
+
+    configured_indices = sample_config.get("indices")
+    if configured_indices is None:
+        indices = list(range(min(count, len(dataset))))
+    else:
+        indices = [int(index) % len(dataset) for index in configured_indices[:count]]
+
+    items = [dataset[index] for index in indices]
+    return {
+        "hr": torch.stack([item["hr"] for item in items], dim=0),
+        "lr": torch.stack([item["lr"] for item in items], dim=0),
+        "path": [item["path"] for item in items],
+        "split": split,
+        "indices": indices,
+    }
 
 
 def clean_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -119,6 +179,14 @@ def main() -> None:
     print(f"device={device} dtype={dtype_name}")
 
     dataset = ManifestImageDataset.from_config(config["data"], seed=seed)
+    fixed_sample_batch = make_fixed_sample_batch(config, seed=seed)
+    if fixed_sample_batch is not None:
+        print(
+            "sample_logging="
+            f"split={fixed_sample_batch['split']} "
+            f"indices={fixed_sample_batch['indices']} "
+            f"count={len(fixed_sample_batch['path'])}"
+        )
     generator = torch.Generator()
     generator.manual_seed(seed)
     dataloader = DataLoader(
@@ -217,19 +285,48 @@ def main() -> None:
 
             if step % sample_every == 0 or step == 1:
                 with torch.no_grad():
-                    sample = torch.cat(
-                        [
-                            denormalize(target[:4]).float().cpu(),
-                            denormalize(output.reconstruction[:4]).float().cpu(),
-                        ],
-                        dim=0,
-                    )
-                    sample_path = samples_dir / f"step_{step:07d}.png"
-                    save_image(sample, sample_path, nrow=4)
+                    sample_source = fixed_sample_batch if fixed_sample_batch is not None else batch
+                    sample_hr = sample_source["hr"].to(device, non_blocking=True)
+                    sample_target = sample_hr.mul(2.0).sub(1.0)
+                    with autocast_context(device, dtype_name):
+                        sample_output = model(sample_target, sample_posterior=False)
+
+                    sample_count = sample_hr.shape[0]
+                    lr = sample_source["lr"][:sample_count].float().cpu()
+                    gt = denormalize(sample_target).float().cpu()
+                    hr = denormalize(sample_output.reconstruction).float().cpu()
+                    lr_display = F.interpolate(lr, size=gt.shape[-2:], mode="nearest")
+
+                    lr_path = samples_dir / f"step_{step:07d}_lr.png"
+                    gt_path = samples_dir / f"step_{step:07d}_gt.png"
+                    hr_path = samples_dir / f"step_{step:07d}_hr.png"
+                    save_image(lr_display, lr_path, nrow=sample_count)
+                    save_image(gt, gt_path, nrow=sample_count)
+                    save_image(hr, hr_path, nrow=sample_count)
+
                     if run is not None:
                         import wandb
 
-                        wandb_log(run, {"samples/reconstruction_grid": wandb.Image(str(sample_path))}, step=step)
+                        paths = sample_source.get("path", [""] * sample_count)
+                        captions = [Path(str(path)).name or f"sample_{idx}" for idx, path in enumerate(paths[:sample_count])]
+                        wandb_log(
+                            run,
+                            {
+                                "samples/LR": [
+                                    wandb.Image(tensor_to_pil(image), caption=caption)
+                                    for image, caption in zip(lr_display, captions, strict=True)
+                                ],
+                                "samples/GT": [
+                                    wandb.Image(tensor_to_pil(image), caption=caption)
+                                    for image, caption in zip(gt, captions, strict=True)
+                                ],
+                                "samples/HR": [
+                                    wandb.Image(tensor_to_pil(image), caption=caption)
+                                    for image, caption in zip(hr, captions, strict=True)
+                                ],
+                            },
+                            step=step,
+                        )
 
             if step % save_every == 0 or step == max_steps:
                 save_checkpoint(checkpoints_dir / f"step_{step:07d}.pt", model, optimizer, step, config)

@@ -1,16 +1,22 @@
 project:
-  name: autoencoder_photo10k_b16_online
-  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_online
+  name: autoencoder_photo10k_b16_lrgthr_online
+  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_lrgthr_online
 
 logging:
   wandb:
     enabled: true
     project: sr-diffusion
-    name: autoencoder_photo10k_b16_online
+    name: autoencoder_photo10k_b16_lrgthr_online
     mode: online
     dir: /home/jwheojjang/scratch/sr-diffusion/wandb
-    tags: [autoencoder, photo10k, photo, b16]
+    tags: [autoencoder, photo10k, photo, b16, lrgthr]
     watch: false
+  samples:
+    enabled: true
+    split: val
+    fallback_split: train
+    count: 4
+    indices: [0, 1, 2, 3]
 
 seed: 1337
 
