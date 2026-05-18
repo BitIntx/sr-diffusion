@@ -48,7 +48,8 @@ Constraints:
 
 ## Current Status
 
-We are currently in **Stage 1: VAE / Autoencoder training**.
+We finished the first **Stage 1: VAE / Autoencoder** pass and are now starting
+**Stage 2: deterministic LR -> HR latent pretraining**.
 
 Implemented:
 
@@ -58,7 +59,7 @@ Implemented:
 - Factor-4 `AutoencoderKL`.
 - Autoencoder training loop with bf16 autocast.
 - W&B online/offline logging.
-- Fixed validation sample logging:
+- Fixed validation sample logging for Stage 1:
   - `samples/LR`
   - `samples/GT`
   - `samples/HR`
@@ -71,20 +72,27 @@ Implemented:
   - `eval/num_images`
 - Standalone checkpoint eval script.
 - Scratch recovery scripts for ephemeral VM storage.
+- Stage 2 LR-to-latent predictor and training loop.
 
-Active training config:
+Stage 1 training config:
 
 ```text
 configs/autoencoder_photo10k.yaml
 ```
 
-Current run name:
+Stage 1 run name:
 
 ```text
 autoencoder_photo10k_b16_eval_online
 ```
 
-Current VAE shape:
+Selected Stage 1 VAE checkpoint:
+
+```text
+/home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/checkpoints/best_eval_recon.pt
+```
+
+Stage 1 VAE shape:
 
 ```text
 HR 512x512 -> latent 128x128
@@ -95,6 +103,27 @@ train set: 10000 photo images
 val set: 100 photo images
 eval: every 1000 steps
 fixed sample logging: every 500 steps
+```
+
+The first Stage 1 pass was stopped at step `50000`. The selected checkpoint is
+`best_eval_recon.pt`, which matched the 50k checkpoint in the current run:
+
+```text
+eval/recon: 0.01198
+eval/kl:    9.38684
+eval/psnr:  40.19
+```
+
+Current Stage 2 config:
+
+```text
+configs/latent_pretrain_photo10k.yaml
+```
+
+Current Stage 2 run name:
+
+```text
+latent_pretrain_photo10k_b16
 ```
 
 At `batch_size=16`, one epoch is:
@@ -204,6 +233,26 @@ Watch the training log:
 tail -f /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/train_tmux.log
 ```
 
+Run the current Stage 2 deterministic latent pretraining config:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_latent_pretrain.py \
+  --config configs/latent_pretrain_photo10k.yaml
+```
+
+Recommended Stage 2 tmux launch:
+
+```bash
+tmux new-session -d -s sr_stage2 \
+  'cd /home/jwheojjang/sr-diffusion && env PYTHONUNBUFFERED=1 /home/jwheojjang/venvs/rocm/bin/python train_latent_pretrain.py --config configs/latent_pretrain_photo10k.yaml > /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/train_tmux.log 2>&1'
+```
+
+Watch the Stage 2 log:
+
+```bash
+tail -f /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/train_tmux.log
+```
+
 Watch GPU usage:
 
 ```bash
@@ -300,7 +349,7 @@ Stage 0: scaffold and data pipeline
 
 Stage 1: VAE / Autoencoder
 
-- Current stage.
+- Done for the first pass.
 - Train factor-4 VAE on 512 HR crops.
 - Select checkpoint using fixed visual samples plus `eval/recon`, `eval/psnr`,
   and residual qualitative checks.
@@ -313,11 +362,19 @@ Stage 1: VAE / Autoencoder
 
 Stage 2: deterministic LR -> HR latent pretrain
 
-- Next major stage.
-- Freeze or reuse the selected VAE.
-- Train a condition encoder / predictor that maps degraded LR inputs to HR VAE
-  latents.
+- Current stage.
+- Freeze the selected Stage 1 VAE.
+- Train an LR-to-latent predictor that maps degraded LR inputs to HR VAE
+  encoder means.
 - This is where LR degradation quality starts to matter directly.
+- Log fixed validation `samples/LR`, `samples/GT`, and `samples/Pred` to W&B.
+
+Run the current Stage 2 pretraining config:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_latent_pretrain.py \
+  --config configs/latent_pretrain_photo10k.yaml
+```
 
 Stage 3: conditional latent diffusion
 
@@ -358,6 +415,7 @@ src/sr_diffusion/         package code
   losses/                 reconstruction/KL losses
   models/                 AutoencoderKL and future models
 train_autoencoder.py      Stage 1 training entrypoint
+train_latent_pretrain.py  Stage 2 deterministic latent pretraining entrypoint
 eval_autoencoder.py       standalone VAE eval entrypoint
 infer_reconstruct.py      reconstruction smoke/inference
 tests/                    unit tests

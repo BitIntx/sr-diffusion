@@ -1,0 +1,69 @@
+project:
+  name: latent_pretrain_scratch_tiny
+  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_scratch_tiny
+
+logging:
+  wandb:
+    enabled: true
+    project: sr-diffusion
+    name: latent_pretrain_scratch_tiny
+    mode: offline
+    dir: /home/jwheojjang/scratch/sr-diffusion/wandb
+    tags: [stage2, latent-pretrain, smoke]
+    watch: false
+  samples:
+    enabled: true
+    split: val
+    fallback_split: train
+    count: 2
+    indices: [0, 1]
+
+seed: 1337
+
+autoencoder:
+  config: configs/autoencoder_scratch_tiny.yaml
+  checkpoint: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_scratch_tiny/checkpoints/latest.pt
+
+data:
+  manifest: /home/jwheojjang/scratch/sr-diffusion/data/toy/manifest.csv
+  split: train
+  hr_size: 128
+  scale: 4
+  degradation_preset: mild
+  domains:
+    photo: 0
+    anime: 1
+  num_workers: 0
+
+model:
+  type: lr_to_latent_predictor
+  in_channels: 3
+  latent_channels: 8
+  base_channels: 32
+  num_blocks: 2
+  norm_groups: 8
+  num_domains: 2
+
+train:
+  device: auto
+  dtype: bf16
+  batch_size: 2
+  max_steps: 20
+  lr: 0.0002
+  weight_decay: 0.0
+  grad_accum_steps: 1
+  log_every: 5
+  save_every: 10
+  sample_every: 10
+
+eval:
+  enabled: true
+  split: val
+  limit: 4
+  batch_size: 2
+  num_workers: 0
+  every: 10
+  run_at_start: true
+
+loss:
+  latent: charbonnier
