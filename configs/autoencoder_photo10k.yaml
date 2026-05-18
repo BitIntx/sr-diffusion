@@ -1,15 +1,15 @@
 project:
-  name: autoencoder_photo10k
-  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k
+  name: autoencoder_photo10k_b16_online
+  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_online
 
 logging:
   wandb:
     enabled: true
     project: sr-diffusion
-    name: autoencoder_photo10k
-    mode: offline
+    name: autoencoder_photo10k_b16_online
+    mode: online
     dir: /home/jwheojjang/scratch/sr-diffusion/wandb
-    tags: [autoencoder, photo10k, photo]
+    tags: [autoencoder, photo10k, photo, b16]
     watch: false
 
 seed: 1337
@@ -38,7 +38,7 @@ model:
 train:
   device: auto
   dtype: bf16
-  batch_size: 8
+  batch_size: 16
   max_steps: 100000
   lr: 0.0001
   weight_decay: 0.0
