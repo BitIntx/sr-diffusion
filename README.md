@@ -2,26 +2,147 @@
 
 Vision-only x4 latent diffusion super-resolution experiments.
 
-The first milestone is Stage 0-1:
+This project is for study/research. The goal is to train an SR model directly,
+without using a pretrained text-to-image diffusion model. The intended final
+model handles photo and anime/illustration domains in one codebase with domain
+conditioning.
 
-- Project scaffold and config loading.
-- Manifest-based photo/anime dataset.
-- Deterministic x4 degradation presets.
-- Factor-4 AutoencoderKL for 512 -> 128 latents.
-- Autoencoder training and reconstruction smoke test.
+## Goal
 
-This repo avoids custom CUDA ops. ROCm devices are accessed through PyTorch's
-standard `cuda` device abstraction.
+Target task:
 
-## Quick smoke test
-
-Create a toy dataset:
-
-```bash
-python scripts/make_toy_dataset.py --output runs/toy_data --count 16
+```text
+LR 128x128 -> HR 512x512
+LR 192x192 -> HR 768x768 later
 ```
 
-## Scratch disk
+Planned model:
+
+```text
+HR image
+  -> factor-4 VAE / autoencoder
+  -> HR latent
+
+LR image
+  -> condition encoder
+  -> multi-scale LR features
+
+noisy HR latent + LR features + timestep + domain embedding
+  -> conditional diffusion U-Net
+  -> denoised HR latent
+  -> VAE decoder
+  -> x4 SR output
+```
+
+Constraints:
+
+- PyTorch first.
+- ROCm/GPU primary.
+- No custom CUDA/ROCm ops.
+- TPU/XLA compatibility is a later consideration, so code should stay close to
+  standard PyTorch where practical.
+- No pretrained T2I model dependency.
+
+## Current Status
+
+We are currently in **Stage 1: VAE / Autoencoder training**.
+
+Implemented:
+
+- Project scaffold and config loading.
+- Manifest-based dataset loader with `photo` / `anime` domain IDs.
+- On-the-fly x4 degradation pipeline.
+- Factor-4 `AutoencoderKL`.
+- Autoencoder training loop with bf16 autocast.
+- W&B online/offline logging.
+- Fixed validation sample logging:
+  - `samples/LR`
+  - `samples/GT`
+  - `samples/HR`
+- Validation eval during training:
+  - `eval/loss`
+  - `eval/recon`
+  - `eval/kl`
+  - `eval/mse`
+  - `eval/psnr`
+  - `eval/num_images`
+- Standalone checkpoint eval script.
+- Scratch recovery scripts for ephemeral VM storage.
+
+Active training config:
+
+```text
+configs/autoencoder_photo10k.yaml
+```
+
+Current run name:
+
+```text
+autoencoder_photo10k_b16_eval_online
+```
+
+Current VAE shape:
+
+```text
+HR 512x512 -> latent 128x128
+latent channels: 16
+batch size: 16
+max steps: 100000
+train set: 10000 photo images
+val set: 100 photo images
+eval: every 1000 steps
+fixed sample logging: every 500 steps
+```
+
+At `batch_size=16`, one epoch is:
+
+```text
+10000 images / 16 = 625 steps
+```
+
+So the current `100000` step config is about `160` epochs.
+
+## Data
+
+The current photo training manifest is:
+
+```text
+/home/jwheojjang/scratch/sr-diffusion/data/manifest_photo10k.csv
+```
+
+It contains:
+
+```text
+photo/train: 10000
+photo/val:   100
+```
+
+The 10k photo set is built from:
+
+- DIV2K HR.
+- Flickr2K HR.
+- A deterministic subset of COCO train2017.
+
+LR images are not stored. They are generated on the fly from HR crops by the
+degradation pipeline. The current `mild` degradation already includes light LR
+noise:
+
+- Gaussian noise with probability `0.25`, sigma `[0.0, 4.0]`.
+- Poisson noise with probability `0.05`.
+- JPEG/WebP compression.
+- blur, color jitter, sharpening, and mild banding.
+
+For VAE training, LR is only used for visual logging. The VAE loss is:
+
+```text
+HR -> encode -> latent -> decode -> reconstructed HR
+```
+
+LR degradation becomes a core training signal in Stage 2/3.
+
+See [docs/DATASETS.md](docs/DATASETS.md) for dataset notes and licensing caveats.
+
+## Scratch Disk
 
 This VM exposes an ext4 scratch partition labeled `DOSCRATCH`. Mount it before
 large datasets or long training runs:
@@ -30,9 +151,11 @@ large datasets or long training runs:
 bash scripts/mount_doscratch.sh
 ```
 
-The default mount point is `/home/jwheojjang/scratch`. Pass another mount point
-as the first argument if needed. If the disk was mounted read-only, run the same
-script again; it will try to remount it read-write.
+The default mount point is:
+
+```text
+/home/jwheojjang/scratch
+```
 
 The scratch volume is treated as ephemeral. After a VM restart, recover the
 scratch layout and development datasets with:
@@ -41,72 +164,230 @@ scratch layout and development datasets with:
 bash scripts/recover_scratch.sh
 ```
 
-That recreates directories, the toy dataset, DIV2K, Flickr2K, a COCO train2017
-subset, and the combined 10k photo manifest. Add `--smoke` if you also want a
-1-step training check after recovery.
+That recreates:
 
-To recover only the smaller DIV2K seed dataset, skip Flickr2K and COCO:
+- scratch directories
+- toy dataset
+- DIV2K
+- Flickr2K
+- COCO train2017 subset
+- `manifest_photo10k.csv`
+
+To recover only the smaller DIV2K seed dataset:
 
 ```bash
 bash scripts/recover_scratch.sh --skip-flickr2k --skip-coco
 ```
 
-The default recovery creates
-`/home/jwheojjang/scratch/sr-diffusion/data/manifest_photo10k.csv` for
-[configs/autoencoder_photo10k.yaml](configs/autoencoder_photo10k.yaml).
+## Training
 
-Expected real dataset layout:
+Run the current Stage 1 VAE training config:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_autoencoder.py \
+  --config configs/autoencoder_photo10k.yaml
+```
+
+Recommended long-running launch through tmux:
+
+```bash
+tmux new-session -d -s sr_ae10k \
+  'cd /home/jwheojjang/sr-diffusion && env PYTHONUNBUFFERED=1 /home/jwheojjang/venvs/rocm/bin/python train_autoencoder.py --config configs/autoencoder_photo10k.yaml > /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/train_tmux.log 2>&1'
+```
+
+Watch the training log:
+
+```bash
+tail -f /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/train_tmux.log
+```
+
+Watch GPU usage:
+
+```bash
+watch -n 1 rocm-smi --showuse --showmemuse --showtemp --showpower
+```
+
+Attach to the tmux session:
+
+```bash
+tmux attach -t sr_ae10k
+```
+
+Detach without stopping training:
 
 ```text
-/home/jwheojjang/scratch/sr-diffusion/datasets/photo/...
-/home/jwheojjang/scratch/sr-diffusion/datasets/anime/...
+Ctrl-b d
 ```
 
-Build a manifest:
+## Eval
 
-```bash
-python scripts/build_manifest.py \
-  --photo-dir /home/jwheojjang/scratch/sr-diffusion/datasets/photo \
-  --anime-dir /home/jwheojjang/scratch/sr-diffusion/datasets/anime \
-  --output /home/jwheojjang/scratch/sr-diffusion/data/manifest.csv
+Training eval is enabled in `configs/autoencoder_photo10k.yaml`:
+
+```yaml
+eval:
+  enabled: true
+  split: val
+  limit: 100
+  batch_size: 16
+  every: 1000
+  run_at_start: true
 ```
 
-Download DIV2K HR images for the first photo-domain VAE run:
+This means:
 
-```bash
-python scripts/download_div2k.py
-python scripts/dataset_report.py \
-  --manifest /home/jwheojjang/scratch/sr-diffusion/data/manifest_div2k_photo.csv
+- eval at step `1`
+- eval at step `1000`
+- eval at step `2000`
+- and so on
+
+The best checkpoint by `eval/recon` is written to:
+
+```text
+checkpoints/best_eval_recon.pt
 ```
 
-See [docs/DATASETS.md](docs/DATASETS.md) for dataset notes and licensing caveats.
-
-W&B logging is enabled in scratch configs in offline mode. Sync a run later with
-the `wandb sync ...` command printed at the end of training, or switch
-`logging.wandb.mode` to `online` after `wandb login`.
-
-Run tests:
+Manual checkpoint eval:
 
 ```bash
-pytest
+/home/jwheojjang/venvs/rocm/bin/python eval_autoencoder.py \
+  --config configs/autoencoder_photo10k.yaml \
+  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/checkpoints/latest.pt \
+  --split val \
+  --limit 100
+```
+
+## W&B
+
+The current config logs to W&B online:
+
+```yaml
+logging:
+  wandb:
+    project: sr-diffusion
+    name: autoencoder_photo10k_b16_eval_online
+    mode: online
+```
+
+Image logging uses fixed validation images so improvements are comparable over
+time:
+
+```yaml
+logging:
+  samples:
+    split: val
+    count: 4
+    indices: [0, 1, 2, 3]
+```
+
+Logged image keys:
+
+- `samples/LR`: degraded LR, upsampled for viewing.
+- `samples/GT`: original HR target.
+- `samples/HR`: VAE reconstruction.
+
+The name `samples/HR` currently means reconstructed HR output. If this becomes
+confusing, rename it to `samples/Recon` before the next large run.
+
+## Project Roadmap
+
+Stage 0: scaffold and data pipeline
+
+- Done.
+- Repo scaffold, configs, manifests, degradation pipeline, smoke tests.
+
+Stage 1: VAE / Autoencoder
+
+- Current stage.
+- Train factor-4 VAE on 512 HR crops.
+- Select checkpoint using fixed visual samples plus `eval/recon`, `eval/psnr`,
+  and residual qualitative checks.
+- Possible improvements before moving on:
+  - LPIPS/perceptual eval.
+  - perceptual training loss.
+  - KL weight sweep.
+  - larger or domain-balanced data.
+  - rename `samples/HR` to `samples/Recon` for clarity.
+
+Stage 2: deterministic LR -> HR latent pretrain
+
+- Next major stage.
+- Freeze or reuse the selected VAE.
+- Train a condition encoder / predictor that maps degraded LR inputs to HR VAE
+  latents.
+- This is where LR degradation quality starts to matter directly.
+
+Stage 3: conditional latent diffusion
+
+- Train diffusion U-Net over HR latents.
+- Conditioning:
+  - multi-scale LR features
+  - timestep embedding
+  - photo/anime domain embedding
+- Target model size is roughly 250M-500M parameters after the pipeline is stable.
+
+Stage 4: perceptual / GAN fine-tune
+
+- Later-stage quality tuning after diffusion works.
+- Use carefully, because perceptual/GAN tuning can improve apparent sharpness
+  while hurting fidelity.
+
+Stage 5: few-step distillation
+
+- Distill the diffusion model for faster inference.
+
+Stage 6: preference eval
+
+- Fixed private eval set.
+- Generate outputs from multiple checkpoints/settings.
+- A/B comparisons.
+- Accumulate Elo separately for photo and anime.
+
+## Repo Layout
+
+```text
+configs/                  experiment configs
+docs/                     dataset and project notes
+scripts/                  dataset, scratch, and utility scripts
+src/sr_diffusion/         package code
+  datasets/               manifest dataset
+  degradations/           x4 LR degradation pipeline
+  eval/                   eval helpers
+  losses/                 reconstruction/KL losses
+  models/                 AutoencoderKL and future models
+train_autoencoder.py      Stage 1 training entrypoint
+eval_autoencoder.py       standalone VAE eval entrypoint
+infer_reconstruct.py      reconstruction smoke/inference
+tests/                    unit tests
+```
+
+## Smoke Tests
+
+Create a toy dataset:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python scripts/make_toy_dataset.py \
+  --output runs/toy_data \
+  --count 16
 ```
 
 Train a tiny autoencoder for a few steps:
 
 ```bash
-python train_autoencoder.py --config configs/autoencoder_tiny.yaml --limit-steps 10
+/home/jwheojjang/venvs/rocm/bin/python train_autoencoder.py \
+  --config configs/autoencoder_tiny.yaml \
+  --limit-steps 10
 ```
 
-Train the current 10k photo autoencoder run:
+Run unit tests:
 
 ```bash
-python train_autoencoder.py --config configs/autoencoder_photo10k.yaml
+/home/jwheojjang/venvs/rocm/bin/python -m pytest
 ```
 
 Reconstruct one image:
 
 ```bash
-python infer_reconstruct.py \
+/home/jwheojjang/venvs/rocm/bin/python infer_reconstruct.py \
   --config configs/autoencoder_tiny.yaml \
   --checkpoint runs/autoencoder_tiny/checkpoints/latest.pt \
   --input runs/toy_data/images/0000.png \
