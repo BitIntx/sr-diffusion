@@ -211,6 +211,18 @@ To recover only the smaller DIV2K seed dataset:
 bash scripts/recover_scratch.sh --skip-flickr2k --skip-coco
 ```
 
+## Hugging Face
+
+Hugging Face is used as persistent checkpoint storage because scratch can be
+lost after VM restarts. The current target is a private model repository:
+
+```text
+jwheo/sr-diffusion
+```
+
+Upload only selected checkpoints/configs/metrics, not raw datasets. See
+[docs/HUGGINGFACE.md](docs/HUGGINGFACE.md) for the exact upload commands.
+
 ## Training
 
 Run the current Stage 1 VAE training config:
