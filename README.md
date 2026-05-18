@@ -1,14 +1,19 @@
 # sr-diffusion
 
 [![Technical Report](https://img.shields.io/badge/technical_report-PDF-blue)](paper/sr_diffusion_report.pdf)
+[![Code License](https://img.shields.io/badge/code_license-PolyForm_Noncommercial_1.0.0-orange)](LICENSE)
+[![Checkpoint License](https://img.shields.io/badge/checkpoints-CC_BY--NC_4.0-orange)](CHECKPOINT_LICENSE.md)
 
 Vision-only x4 latent diffusion super-resolution experiments.
 Report source: [paper/main.tex](paper/main.tex).
 
-This project is for study/research. The goal is to train an SR model directly,
-without using a pretrained text-to-image diffusion model. The intended final
-model handles photo and anime/illustration domains in one codebase with domain
-conditioning.
+This is a public source-available, non-commercial research project. The goal is
+to train an SR model directly, without using a pretrained text-to-image
+diffusion model. The intended final model handles photo and anime/illustration
+domains in one codebase with domain conditioning.
+
+This repository is not OSI-approved open source because commercial use is not
+permitted.
 
 ## Goal
 
@@ -214,7 +219,7 @@ bash scripts/recover_scratch.sh --skip-flickr2k --skip-coco
 ## Hugging Face
 
 Hugging Face is used as persistent checkpoint storage because scratch can be
-lost after VM restarts. The current target is a private model repository:
+lost after VM restarts. The current target is a public model repository:
 
 ```text
 jwheo/sr-diffusion
@@ -222,6 +227,16 @@ jwheo/sr-diffusion
 
 Upload only selected checkpoints/configs/metrics, not raw datasets. See
 [docs/HUGGINGFACE.md](docs/HUGGINGFACE.md) for the exact upload commands.
+
+## License
+
+Code is released under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Model checkpoints and generated artifacts are released under
+[CC BY-NC 4.0](CHECKPOINT_LICENSE.md).
+
+Commercial use is not permitted without separate written permission. This
+includes paid hosted inference, resale, or integration into commercial
+products.
 
 ## Training
 

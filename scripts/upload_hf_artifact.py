@@ -76,7 +76,7 @@ def build_model_card(title: str, github_url: str, artifacts: list[Artifact]) -> 
     artifact_table = "\n".join(rows)
     return f"""---
 library_name: pytorch
-license: other
+license: cc-by-nc-4.0
 tags:
 - super-resolution
 - latent-diffusion
@@ -91,12 +91,26 @@ Research checkpoint storage for the `sr-diffusion` project.
 
 GitHub: {github_url}
 
-This project trains a vision-only x4 latent diffusion super-resolution pipeline
-from scratch. It does not use a pretrained text-to-image diffusion model.
+This is a public source-available, non-commercial research project. It trains a
+vision-only x4 latent diffusion super-resolution pipeline from scratch and does
+not use a pretrained text-to-image diffusion model.
 
 Current artifacts are study/research checkpoints. They are not a production SR
-model and are not intended for commercial use. Dataset license constraints
-should be reviewed before redistributing derived weights publicly.
+model.
+
+## License
+
+- Checkpoints, generated samples, metrics, and other non-code artifacts:
+  CC BY-NC 4.0.
+- Source code: PolyForm Noncommercial License 1.0.0.
+
+Commercial use is not permitted without separate written permission. This
+includes paid hosted inference, resale, and integration into commercial
+products.
+
+Training data is not redistributed in this repository. Dataset license
+constraints should be reviewed before training or redistributing derived
+weights.
 
 ## Artifacts
 
