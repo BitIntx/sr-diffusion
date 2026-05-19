@@ -134,7 +134,7 @@ Current Stage 2 config:
 configs/latent_pretrain_photo10k.yaml
 ```
 
-Next scale-up Stage 2 config:
+Stage 2 photo100k scale-up config:
 
 ```text
 configs/latent_pretrain_photo100k.yaml
@@ -161,6 +161,17 @@ Stage 2 final result:
 finished step: 50000
 best eval latent loss: step 48000, eval/latent_loss 0.21775
 best decoded PSNR proxy: step 47000, eval/decoded_psnr 23.89
+```
+
+Stage 2 photo100k scale-up result:
+
+```text
+run name: latent_pretrain_photo100k_b64
+finished step: 30000
+selected checkpoint: /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b64/checkpoints/best_eval_latent.pt
+best eval latent loss: step 28000, eval/latent_loss 0.21230
+best decoded PSNR proxy: step 22000, eval/decoded_psnr 23.93
+final eval: step 30000, eval/latent_loss 0.21267, eval/decoded_psnr 23.88
 ```
 
 Current Stage 3 config:
