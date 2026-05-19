@@ -1,6 +1,7 @@
 # sr-diffusion
 
 [![Technical Report](https://img.shields.io/badge/technical_report-PDF-blue)](paper/sr_diffusion_report.pdf)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/BitIntx/sr-diffusion/blob/main/notebooks/sr_diffusion_colab_demo.ipynb)
 [![Code License](https://img.shields.io/badge/code_license-PolyForm_Noncommercial_1.0.0-orange)](LICENSE)
 [![Checkpoint License](https://img.shields.io/badge/checkpoints-CC_BY--NC_4.0-orange)](CHECKPOINT_LICENSE.md)
 
@@ -368,6 +369,12 @@ Upload only selected checkpoints/configs/metrics, not raw datasets. See
 The public Hugging Face prototype can be downloaded and run from a fresh clone.
 It uses the current 10k Stage 4 condition-start checkpoint, not the in-progress
 photo100k training run.
+
+For a click-to-run demo, open the Colab notebook:
+
+```text
+notebooks/sr_diffusion_colab_demo.ipynb
+```
 
 Install PyTorch for the target machine first. For this ROCm VM:
 
