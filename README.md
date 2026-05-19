@@ -597,6 +597,8 @@ train_autoencoder.py      Stage 1 training entrypoint
 train_latent_pretrain.py  Stage 2 deterministic latent pretraining entrypoint
 train_diffusion.py        Stage 3 conditional diffusion training entrypoint
 infer_diffusion.py        Stage 3 DDIM/img2img SR sampling entrypoint
+eval_diffusion_samples.py sampled diffusion validation eval
+compare_eval_samples.py   sampled eval comparison contact sheets
 eval_autoencoder.py       standalone VAE eval entrypoint
 infer_reconstruct.py      reconstruction smoke/inference
 tests/                    unit tests
@@ -696,6 +698,17 @@ Run a small sampled validation sweep and compare against bicubic:
 
 The sampled eval grid is written as `grid_lr_bicubic_sr_gt.png`, with columns in
 this order: LR nearest, bicubic, SR, GT.
+
+Compare two sampled eval directories and create top win/loss contact sheets:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python compare_eval_samples.py \
+  --baseline-dir /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_stage3_val100_t50_32step \
+  --candidate-dir /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_stage4_condition_val100_t25_32step \
+  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/compare_stage3_vs_stage4_condition_val100 \
+  --baseline-label stage3 \
+  --candidate-label stage4cond
+```
 
 Reconstruct one image:
 
