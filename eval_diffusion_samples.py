@@ -17,7 +17,14 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-from infer_diffusion import ddim_sample, load_autoencoder, load_condition_encoder, load_unet, tensor_to_pil
+from infer_diffusion import (
+    ddim_sample,
+    load_autoencoder,
+    load_condition_encoder,
+    load_unet,
+    resolve_start_timestep,
+    tensor_to_pil,
+)
 from sr_diffusion.datasets import ManifestImageDataset
 from sr_diffusion.models import NoiseScheduler
 from sr_diffusion.utils import get_device, load_config, seed_everything
@@ -106,6 +113,7 @@ def main() -> None:
     condition_encoder = load_condition_encoder(config, device)
     model, checkpoint_step = load_unet(config, args.checkpoint, device)
     scheduler = NoiseScheduler.from_config(config.get("diffusion", {}))
+    start_timestep = resolve_start_timestep(config, args.start_timestep)
 
     rows: list[dict[str, Any]] = []
     grid_rows: list[list[Image.Image]] = []
@@ -124,7 +132,7 @@ def main() -> None:
             steps=args.steps,
             eta=args.eta,
             init=args.init,
-            start_timestep=args.start_timestep,
+            start_timestep=start_timestep,
             dtype_name=dtype_name,
             seed=args.seed + global_index,
             output_dir=samples_dir,
@@ -187,7 +195,7 @@ def main() -> None:
         "steps": args.steps,
         "eta": args.eta,
         "init": args.init,
-        "start_timestep": args.start_timestep,
+        "start_timestep": start_timestep,
         "mean_sr_psnr": mean_sr_psnr,
         "mean_bicubic_psnr": mean_bicubic_psnr,
         "mean_psnr_delta": mean_sr_psnr - mean_bicubic_psnr,

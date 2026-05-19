@@ -65,6 +65,11 @@ diffusion:
   train_max_timestep: 100
   train_init: condition
 
+sampling:
+  init: condition
+  start_timestep: 25
+  steps: 32
+
 loss:
   noise_weight: 0.05
   x0_weight: 1.0

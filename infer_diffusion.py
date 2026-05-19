@@ -113,6 +113,13 @@ def make_timesteps(
     return torch.unique_consecutive(timesteps)
 
 
+def resolve_start_timestep(config: dict, requested: int | None) -> int | None:
+    if requested is not None:
+        return requested
+    value = config.get("sampling", {}).get("start_timestep")
+    return None if value is None else int(value)
+
+
 def ddim_sample(
     model: ConditionalUNet,
     vae: AutoencoderKL,
@@ -212,12 +219,13 @@ def main() -> None:
     condition_encoder = load_condition_encoder(config, device)
     model, checkpoint_step = load_unet(config, args.checkpoint, device)
     scheduler = NoiseScheduler.from_config(config.get("diffusion", {}))
+    start_timestep = resolve_start_timestep(config, args.start_timestep)
 
     lr_tensor = pil_to_tensor(lr_image).unsqueeze(0).repeat(args.num_samples, 1, 1, 1).to(device)
     domain_id = torch.full((args.num_samples,), int(domains[args.domain]), device=device, dtype=torch.long)
     print(
         f"checkpoint_step={checkpoint_step} lr_size={lr_image.size} steps={args.steps} "
-        f"eta={args.eta} init={args.init} start_timestep={args.start_timestep} "
+        f"eta={args.eta} init={args.init} start_timestep={start_timestep} "
         f"samples={args.num_samples} device={device}"
     )
 
@@ -231,7 +239,7 @@ def main() -> None:
         steps=args.steps,
         eta=args.eta,
         init=args.init,
-        start_timestep=args.start_timestep,
+        start_timestep=start_timestep,
         dtype_name=dtype_name,
         seed=args.seed,
         output_dir=args.output_dir,

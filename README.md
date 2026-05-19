@@ -56,10 +56,10 @@ Constraints:
 We finished the first **Stage 1: VAE / Autoencoder** pass, the first
 **Stage 2: deterministic LR -> HR latent pretraining** pass, and the first
 **Stage 3: conditional latent diffusion** pass. The current best sampled SR
-checkpoint is still the Stage 3 checkpoint. A conservative Stage 4-lite
-low-timestep fine-tune improved one-step diagnostics but did not improve the
-fixed 32-step sampled validation result, so it is recorded as an experiment
-rather than promoted as the best model.
+checkpoint is the Stage 4 condition-start checkpoint initialized from Stage 3.
+A conservative Stage 4-lite low-timestep fine-tune improved one-step diagnostics
+but did not improve the fixed 32-step sampled validation result, so it is
+recorded as an experiment rather than promoted as the best model.
 
 Implemented:
 
@@ -85,7 +85,7 @@ Implemented:
 - Stage 2 LR-to-latent predictor and training loop.
 - Stage 3 conditional U-Net, noise scheduler, and diffusion training loop.
 - Stage 3 DDIM/img2img inference and sampled validation eval.
-- Stage 4-lite low-timestep and condition-start fine-tune scaffolding.
+- Stage 4-lite low-timestep and condition-start fine-tuning.
 
 Stage 1 training config:
 
@@ -183,13 +183,21 @@ best eval noise/x0: step 24000, eval/noise_mse 0.00766, eval/x0_mse 0.09063
 best decoded PSNR diagnostic: step 25000, eval/decoded_psnr 24.10
 ```
 
-Current sampled Stage 3 eval, using `--init condition`, `--start-timestep 50`,
+Sampled Stage 3 eval, using `--init condition`, `--start-timestep 50`,
 and 32 DDIM steps on 32 fixed validation images:
 
 ```text
 mean bicubic PSNR: 24.66
 mean SR PSNR:      25.55
 mean delta:        +0.89 dB
+```
+
+Sampled Stage 3 eval on all 100 validation images:
+
+```text
+mean bicubic PSNR: 24.478
+mean SR PSNR:      25.222
+mean delta:        +0.744 dB
 ```
 
 Stage 4-lite low-timestep fine-tune result:
@@ -206,10 +214,20 @@ sampled val32 delta vs Stage 3: -0.0037 dB
 decision: do not promote; keep Stage 3 as current best sampled checkpoint
 ```
 
-The next Stage 4 experiment is condition-start fine-tuning:
+Stage 4 condition-start fine-tune result:
 
 ```text
-configs/diffusion_photo10k_b32_stage4_condition.yaml
+config: configs/diffusion_photo10k_b32_stage4_condition.yaml
+selected checkpoint: /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt
+initialized from: Stage 3 best checkpoint
+train timesteps: 25..100
+stopped early: step 2500, best checkpoint at step 1000
+best one-step condition diagnostic: step 1000, eval/decoded_psnr 23.78
+best sampled setting: --init condition --start-timestep 25 --steps 32
+sampled val32 SR PSNR: 25.660
+sampled val100 SR PSNR: 25.293
+sampled val100 delta vs Stage 3: +0.071 dB
+decision: promote as current best sampled checkpoint
 ```
 
 This trains the low-timestep path from the Stage 2 condition latent instead of
@@ -222,7 +240,7 @@ At `batch_size=32`, one epoch is:
 10000 images / 32 = 312.5 steps
 ```
 
-So the current Stage 3 `25000` step config is about `80` epochs.
+So the Stage 3 `25000` step config is about `80` epochs.
 
 ## Data
 
@@ -510,7 +528,8 @@ Run the current Stage 2 pretraining config:
 
 Stage 3: conditional latent diffusion
 
-- First pass complete. This is the current best sampled SR model.
+- First pass complete. It is the baseline for the current Stage 4 condition
+  checkpoint.
 - Train diffusion U-Net over HR latents.
 - Conditioning:
   - frozen Stage 2 LR-to-latent condition encoder
@@ -525,12 +544,13 @@ Stage 4: perceptual / GAN fine-tune
 - First conservative Stage 4-lite low-timestep fine-tune is complete. It
   improved one-step diagnostics but not the fixed 32-step sampled eval, so it
   is not promoted over Stage 3.
-- The next experiment is condition-start fine-tuning, initialized from the
-  Stage 3 best checkpoint. It trains low timesteps `25..100`, but starts the
-  training noisy latent from the Stage 2 condition latent so the train path
-  better matches `infer_diffusion.py --init condition`.
+- Condition-start fine-tuning, initialized from the Stage 3 best checkpoint,
+  is the current best sampled SR checkpoint. It trains low timesteps `25..100`,
+  but starts the training noisy latent from the Stage 2 condition latent so the
+  train path better matches `infer_diffusion.py --init condition`.
 - It uses a small effective-noise loss plus a stronger x0 latent reconstruction
-  loss to preserve fidelity.
+  loss to preserve fidelity. The best sampled setting so far is
+  `--start-timestep 25`.
 - Use carefully, because later perceptual/GAN tuning can improve apparent
   sharpness while hurting fidelity.
 
@@ -614,7 +634,24 @@ Run a tiny Stage 3 smoke test:
   --limit-steps 1
 ```
 
-Run Stage 3 sampling from an HR image by creating a controlled LR input first:
+Run current best Stage 4 condition-start sampling from an HR image by creating
+a controlled LR input first:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python infer_diffusion.py \
+  --config configs/diffusion_photo10k_b32_stage4_condition.yaml \
+  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt \
+  --input-hr /path/to/hr_image.png \
+  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/infer_diffusion_stage4_condition \
+  --steps 32 \
+  --seed 123
+```
+
+The Stage 4 condition config sets `sampling.start_timestep: 25`, so the command
+above uses the best sampled setting found so far unless `--start-timestep` is
+passed explicitly.
+
+Run Stage 3 baseline sampling from an HR image by creating a controlled LR input first:
 
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python infer_diffusion.py \
@@ -626,7 +663,7 @@ Run Stage 3 sampling from an HR image by creating a controlled LR input first:
   --seed 123
 ```
 
-Run Stage 3 sampling from an existing LR image:
+Run Stage 3 baseline sampling from an existing LR image:
 
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python infer_diffusion.py \
@@ -639,17 +676,18 @@ Run Stage 3 sampling from an existing LR image:
 ```
 
 The default sampler starts from the Stage 2 condition latent with light noise
-added (`--init condition`, `--start-timestep 50`). Pure noise sampling is
-available with `--init noise`, but the current Stage 3 checkpoint is more stable
-in condition-initialized mode.
+added (`--init condition`). If a config has `sampling.start_timestep`, that
+value is used when `--start-timestep` is omitted. Otherwise condition sampling
+falls back to `50`. Pure noise sampling is available with `--init noise`, but
+the current checkpoints are more stable in condition-initialized mode.
 
 Run a small sampled validation sweep and compare against bicubic:
 
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python eval_diffusion_samples.py \
-  --config configs/diffusion_photo10k_b32.yaml \
-  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt \
-  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_b32_val8_32step \
+  --config configs/diffusion_photo10k_b32_stage4_condition.yaml \
+  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt \
+  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_stage4_condition_val8_32step \
   --split val \
   --limit 8 \
   --steps 32 \

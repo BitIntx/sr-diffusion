@@ -51,6 +51,18 @@ For a dry run:
   --artifact configs/latent_pretrain_photo10k.yaml=configs/latent_pretrain_photo10k.yaml
 ```
 
+Upload the current best sampled Stage 4 condition-start checkpoint and metrics:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python scripts/upload_hf_artifact.py \
+  --repo-id jwheo/sr-diffusion \
+  --repo-type model \
+  --message "Upload Stage 4 condition-start checkpoint" \
+  --artifact configs/diffusion_photo10k_b32_stage4_condition.yaml=configs/diffusion_photo10k_b32_stage4_condition.yaml \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt=checkpoints/stage4_condition_b32_best_eval_condition_decoded.pt \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_stage4_condition_val100_t25_32step/summary.json=metrics/stage4_condition_val100_t25_32step_summary.json
+```
+
 Make the Hub repository public after license files and the model card are in
 place:
 
