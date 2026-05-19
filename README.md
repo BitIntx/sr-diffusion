@@ -400,6 +400,21 @@ python infer_diffusion.py \
   --output-dir outputs/demo
 ```
 
+Run tiled x4 SR from a larger LR image:
+
+```bash
+python infer_diffusion.py \
+  --input-lr /path/to/larger_lr.png \
+  --output-dir outputs/tiled_demo \
+  --tile \
+  --tile-overlap 32
+```
+
+Tiled inference splits the LR image into overlapping 128x128 tiles, samples each
+tile, and feather-blends the 512x512 tile outputs back into one x4 image. It is
+slower than single-tile inference because diffusion sampling runs per tile.
+Start with small LR images, for example 256x256 or 384x384, when using Colab.
+
 For a controlled smoke test from an HR image, let the script center-crop HR and
 create the degraded LR input first:
 

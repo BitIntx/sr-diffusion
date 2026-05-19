@@ -36,6 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-samples", type=int, default=1)
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--resize-lr", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--tile", action="store_true", help="Run tiled inference for arbitrary-size LR images.")
+    parser.add_argument("--tile-overlap", type=int, default=32, help="LR-pixel overlap between 128x128 tiles.")
+    parser.add_argument("--tile-batch-size", type=int, default=1, help="Number of LR tiles to sample at once.")
     parser.add_argument("--save-every", type=int, default=0, help="Save intermediate samples every N sampler steps.")
     return parser.parse_args()
 
@@ -49,6 +52,11 @@ def tensor_to_pil(image: torch.Tensor) -> Image.Image:
     array = image.permute(1, 2, 0).numpy()
     array = np.round(array * 255.0).astype(np.uint8)
     return Image.fromarray(array, mode="RGB")
+
+
+def float_array_to_pil(array: np.ndarray) -> Image.Image:
+    array = np.clip(array, 0.0, 1.0)
+    return Image.fromarray(np.round(array * 255.0).astype(np.uint8), mode="RGB")
 
 
 def resolve_path(config: dict, value: str | Path) -> Path:
@@ -127,6 +135,60 @@ def prepare_inputs(args: argparse.Namespace, config: dict) -> tuple[Image.Image,
     elif lr.size != (lr_size, lr_size):
         raise ValueError(f"Expected LR size {(lr_size, lr_size)}, got {lr.size}. Use --resize-lr to resize/crop.")
     return lr, None
+
+
+def tile_positions(length: int, tile_size: int, overlap: int) -> list[int]:
+    if tile_size <= 0:
+        raise ValueError(f"tile_size must be positive: {tile_size}")
+    if overlap < 0 or overlap >= tile_size:
+        raise ValueError(f"tile_overlap must be in [0, {tile_size - 1}], got {overlap}")
+    if length <= tile_size:
+        return [0]
+    stride = tile_size - overlap
+    positions = list(range(0, length - tile_size + 1, stride))
+    last = length - tile_size
+    if positions[-1] != last:
+        positions.append(last)
+    return positions
+
+
+def edge_pad_image(image: Image.Image, min_width: int, min_height: int) -> Image.Image:
+    width, height = image.size
+    padded_width = max(width, min_width)
+    padded_height = max(height, min_height)
+    if (padded_width, padded_height) == (width, height):
+        return image
+    array = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    pad_width = padded_width - width
+    pad_height = padded_height - height
+    padded = np.pad(array, ((0, pad_height), (0, pad_width), (0, 0)), mode="edge")
+    return Image.fromarray(padded, mode="RGB")
+
+
+def tile_blend_mask(
+    tile_size: int,
+    overlap: int,
+    *,
+    left_edge: bool,
+    right_edge: bool,
+    top_edge: bool,
+    bottom_edge: bool,
+) -> np.ndarray:
+    mask_size = int(tile_size)
+    overlap = max(0, min(int(overlap), mask_size // 2))
+    weights_x = np.ones(mask_size, dtype=np.float32)
+    weights_y = np.ones(mask_size, dtype=np.float32)
+    if overlap > 0:
+        ramp = np.sin(np.linspace(0.0, np.pi / 2.0, overlap, dtype=np.float32)) ** 2
+        if not left_edge:
+            weights_x[:overlap] = ramp
+        if not right_edge:
+            weights_x[-overlap:] = ramp[::-1]
+        if not top_edge:
+            weights_y[:overlap] = ramp
+        if not bottom_edge:
+            weights_y[-overlap:] = ramp[::-1]
+    return weights_y[:, None, None] * weights_x[None, :, None]
 
 
 def make_timesteps(
@@ -225,6 +287,96 @@ def ddim_sample(
     return denormalize(decoded)
 
 
+def tiled_sample(
+    model: ConditionalUNet,
+    vae: AutoencoderKL,
+    condition_encoder: LRToLatentPredictor,
+    scheduler: NoiseScheduler,
+    lr_image: Image.Image,
+    domain_id_value: int,
+    scale: int,
+    tile_lr_size: int,
+    overlap_lr: int,
+    tile_batch_size: int,
+    steps: int,
+    eta: float,
+    init: str,
+    start_timestep: int | None,
+    dtype_name: str,
+    seed: int,
+    output_dir: Path,
+    device: torch.device,
+) -> Image.Image:
+    if tile_batch_size <= 0:
+        raise ValueError(f"tile_batch_size must be positive: {tile_batch_size}")
+    if overlap_lr < 0 or overlap_lr >= tile_lr_size:
+        raise ValueError(f"tile_overlap must be in [0, {tile_lr_size - 1}], got {overlap_lr}")
+
+    original_width, original_height = lr_image.size
+    padded = edge_pad_image(lr_image, tile_lr_size, tile_lr_size)
+    padded_width, padded_height = padded.size
+    x_positions = tile_positions(padded_width, tile_lr_size, overlap_lr)
+    y_positions = tile_positions(padded_height, tile_lr_size, overlap_lr)
+    tile_hr_size = tile_lr_size * scale
+    overlap_hr = overlap_lr * scale
+    canvas = np.zeros((padded_height * scale, padded_width * scale, 3), dtype=np.float32)
+    weights = np.zeros((padded_height * scale, padded_width * scale, 1), dtype=np.float32)
+
+    tiles: list[tuple[int, int]] = [(x, y) for y in y_positions for x in x_positions]
+    print(
+        f"tile_inference lr_size={original_width}x{original_height} padded={padded_width}x{padded_height} "
+        f"tiles={len(tiles)} tile={tile_lr_size} overlap={overlap_lr} batch={tile_batch_size}"
+    )
+    for batch_start in range(0, len(tiles), tile_batch_size):
+        batch_coords = tiles[batch_start : batch_start + tile_batch_size]
+        batch_images = [
+            pil_to_tensor(padded.crop((x, y, x + tile_lr_size, y + tile_lr_size))) for x, y in batch_coords
+        ]
+        lr_tensor = torch.stack(batch_images, dim=0).to(device)
+        domain_ids = torch.full((len(batch_coords),), domain_id_value, device=device, dtype=torch.long)
+        with torch.no_grad():
+            output = ddim_sample(
+                model=model,
+                vae=vae,
+                condition_encoder=condition_encoder,
+                scheduler=scheduler,
+                lr=lr_tensor,
+                domain_id=domain_ids,
+                steps=steps,
+                eta=eta,
+                init=init,
+                start_timestep=start_timestep,
+                dtype_name=dtype_name,
+                seed=seed + batch_start,
+                output_dir=output_dir,
+                save_every=0,
+            )
+
+        for tile_output, (x, y) in zip(output, batch_coords, strict=True):
+            tile_array = tile_output.detach().float().cpu().permute(1, 2, 0).numpy()
+            left_edge = x == 0
+            top_edge = y == 0
+            right_edge = x + tile_lr_size >= padded_width
+            bottom_edge = y + tile_lr_size >= padded_height
+            mask = tile_blend_mask(
+                tile_hr_size,
+                overlap_hr,
+                left_edge=left_edge,
+                right_edge=right_edge,
+                top_edge=top_edge,
+                bottom_edge=bottom_edge,
+            )
+            x0 = x * scale
+            y0 = y * scale
+            canvas[y0 : y0 + tile_hr_size, x0 : x0 + tile_hr_size] += tile_array * mask
+            weights[y0 : y0 + tile_hr_size, x0 : x0 + tile_hr_size] += mask
+        print(f"tiles_done={min(batch_start + len(batch_coords), len(tiles))}/{len(tiles)}")
+
+    stitched = canvas / np.maximum(weights, 1e-6)
+    stitched = stitched[: original_height * scale, : original_width * scale]
+    return float_array_to_pil(stitched)
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -238,20 +390,57 @@ def main() -> None:
     domains = data_config.get("domains", {"photo": 0, "anime": 1})
     if args.domain not in domains:
         raise ValueError(f"Unknown domain '{args.domain}'. Available: {sorted(domains)}")
+    if args.tile and args.input_hr:
+        raise ValueError("--tile currently supports --input-lr only. Use --input-lr with an arbitrary-size LR image.")
+    if args.tile and args.num_samples != 1:
+        raise ValueError("--tile currently supports --num-samples 1.")
 
     torch.manual_seed(args.seed)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-
-    lr_image, gt_image = prepare_inputs(args, config)
-    lr_image.save(args.output_dir / "input_lr.png")
-    if gt_image is not None:
-        gt_image.save(args.output_dir / "gt_hr.png")
 
     vae = load_autoencoder(config, device)
     condition_encoder = load_condition_encoder(config, device)
     model, checkpoint_step = load_unet(config, checkpoint_path, device)
     scheduler = NoiseScheduler.from_config(config.get("diffusion", {}))
     start_timestep = resolve_start_timestep(config, args.start_timestep)
+
+    if args.tile:
+        data_scale = int(data_config.get("scale", 4))
+        tile_lr_size = int(data_config["hr_size"]) // data_scale
+        lr_image = Image.open(args.input_lr).convert("RGB")
+        lr_image.save(args.output_dir / "input_lr.png")
+        print(
+            f"checkpoint_step={checkpoint_step} lr_size={lr_image.size} steps={steps} "
+            f"eta={args.eta} init={init} start_timestep={start_timestep} device={device}"
+        )
+        output = tiled_sample(
+            model=model,
+            vae=vae,
+            condition_encoder=condition_encoder,
+            scheduler=scheduler,
+            lr_image=lr_image,
+            domain_id_value=int(domains[args.domain]),
+            scale=data_scale,
+            tile_lr_size=tile_lr_size,
+            overlap_lr=int(args.tile_overlap),
+            tile_batch_size=int(args.tile_batch_size),
+            steps=steps,
+            eta=args.eta,
+            init=init,
+            start_timestep=start_timestep,
+            dtype_name=dtype_name,
+            seed=args.seed,
+            output_dir=args.output_dir,
+            device=device,
+        )
+        output.save(args.output_dir / "sr_00.png")
+        print(f"saved {args.output_dir}")
+        return
+
+    lr_image, gt_image = prepare_inputs(args, config)
+    lr_image.save(args.output_dir / "input_lr.png")
+    if gt_image is not None:
+        gt_image.save(args.output_dir / "gt_hr.png")
 
     lr_tensor = pil_to_tensor(lr_image).unsqueeze(0).repeat(args.num_samples, 1, 1, 1).to(device)
     domain_id = torch.full((args.num_samples,), int(domains[args.domain]), device=device, dtype=torch.long)

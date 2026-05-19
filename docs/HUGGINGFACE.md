@@ -44,6 +44,16 @@ python infer_diffusion.py \
   --output-dir outputs/demo
 ```
 
+Run the same checkpoint in tiled mode for larger LR images:
+
+```bash
+python infer_diffusion.py \
+  --input-lr /path/to/larger_lr.png \
+  --output-dir outputs/tiled_demo \
+  --tile \
+  --tile-overlap 32
+```
+
 The default `infer_diffusion.py` config is the HF-friendly Stage 4 config. It
 uses relative checkpoint paths, so it works outside the original training VM.
 
