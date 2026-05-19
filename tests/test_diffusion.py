@@ -12,9 +12,11 @@ def test_noise_scheduler_shapes() -> None:
     timesteps = torch.tensor([0, 9])
     noisy = scheduler.add_noise(x0, noise, timesteps)
     pred_x0 = scheduler.predict_x0_from_noise(noisy, timesteps, noise)
+    recovered_noise = scheduler.noise_from_x0(noisy, x0, timesteps)
     assert noisy.shape == x0.shape
     assert pred_x0.shape == x0.shape
     assert torch.isfinite(pred_x0).all()
+    assert torch.allclose(recovered_noise, noise, atol=2e-4)
 
 
 def test_conditional_unet_shape() -> None:

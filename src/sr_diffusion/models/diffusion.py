@@ -69,3 +69,10 @@ class NoiseScheduler:
         sqrt_recip = _extract(self.sqrt_recip_alphas_cumprod, timesteps, noisy.shape).to(dtype=noisy.dtype)
         sqrt_recipm1 = _extract(self.sqrt_recipm1_alphas_cumprod, timesteps, noisy.shape).to(dtype=noisy.dtype)
         return sqrt_recip * noisy - sqrt_recipm1 * noise
+
+    def noise_from_x0(self, noisy: torch.Tensor, original: torch.Tensor, timesteps: torch.Tensor) -> torch.Tensor:
+        sqrt_alpha = _extract(self.sqrt_alphas_cumprod, timesteps, noisy.shape).to(dtype=noisy.dtype)
+        sqrt_one_minus_alpha = _extract(self.sqrt_one_minus_alphas_cumprod, timesteps, noisy.shape).to(
+            dtype=noisy.dtype
+        )
+        return (noisy - sqrt_alpha * original) / sqrt_one_minus_alpha.clamp_min(1e-8)

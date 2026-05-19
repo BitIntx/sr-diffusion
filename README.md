@@ -53,9 +53,13 @@ Constraints:
 
 ## Current Status
 
-We finished the first **Stage 1: VAE / Autoencoder** pass and the first
-**Stage 2: deterministic LR -> HR latent pretraining** pass. We are now moving
-into **Stage 3: conditional latent diffusion**.
+We finished the first **Stage 1: VAE / Autoencoder** pass, the first
+**Stage 2: deterministic LR -> HR latent pretraining** pass, and the first
+**Stage 3: conditional latent diffusion** pass. The current best sampled SR
+checkpoint is still the Stage 3 checkpoint. A conservative Stage 4-lite
+low-timestep fine-tune improved one-step diagnostics but did not improve the
+fixed 32-step sampled validation result, so it is recorded as an experiment
+rather than promoted as the best model.
 
 Implemented:
 
@@ -80,6 +84,8 @@ Implemented:
 - Scratch recovery scripts for ephemeral VM storage.
 - Stage 2 LR-to-latent predictor and training loop.
 - Stage 3 conditional U-Net, noise scheduler, and diffusion training loop.
+- Stage 3 DDIM/img2img inference and sampled validation eval.
+- Stage 4-lite low-timestep and condition-start fine-tune scaffolding.
 
 Stage 1 training config:
 
@@ -163,6 +169,20 @@ batch size: 32
 max steps: 25000
 ```
 
+Selected Stage 3 checkpoint:
+
+```text
+/home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
+```
+
+Stage 3 training result:
+
+```text
+finished step: 25000
+best eval noise/x0: step 24000, eval/noise_mse 0.00766, eval/x0_mse 0.09063
+best decoded PSNR diagnostic: step 25000, eval/decoded_psnr 24.10
+```
+
 Current sampled Stage 3 eval, using `--init condition`, `--start-timestep 50`,
 and 32 DDIM steps on 32 fixed validation images:
 
@@ -172,13 +192,37 @@ mean SR PSNR:      25.55
 mean delta:        +0.89 dB
 ```
 
-At `batch_size=16`, one epoch is:
+Stage 4-lite low-timestep fine-tune result:
 
 ```text
-10000 images / 16 = 625 steps
+config: configs/diffusion_photo10k_b32_stage4_lowt.yaml
+initialized from: Stage 3 best checkpoint
+train timesteps: 0..100
+finished step: 5000
+best eval/x0_mse: step 5000, eval/x0_mse 0.01186
+best decoded PSNR diagnostic: step 4500, eval/decoded_psnr 32.74
+sampled val32 SR PSNR: 25.5493
+sampled val32 delta vs Stage 3: -0.0037 dB
+decision: do not promote; keep Stage 3 as current best sampled checkpoint
 ```
 
-So the current `100000` step config is about `160` epochs.
+The next Stage 4 experiment is condition-start fine-tuning:
+
+```text
+configs/diffusion_photo10k_b32_stage4_condition.yaml
+```
+
+This trains the low-timestep path from the Stage 2 condition latent instead of
+from a noised ground-truth latent, matching the current inference initialization
+more closely.
+
+At `batch_size=32`, one epoch is:
+
+```text
+10000 images / 32 = 312.5 steps
+```
+
+So the current Stage 3 `25000` step config is about `80` epochs.
 
 ## Data
 
@@ -466,7 +510,7 @@ Run the current Stage 2 pretraining config:
 
 Stage 3: conditional latent diffusion
 
-- Current stage.
+- First pass complete. This is the current best sampled SR model.
 - Train diffusion U-Net over HR latents.
 - Conditioning:
   - frozen Stage 2 LR-to-latent condition encoder
@@ -477,13 +521,16 @@ Stage 3: conditional latent diffusion
 
 Stage 4: perceptual / GAN fine-tune
 
-- Current next step is a conservative Stage 4-lite low-timestep diffusion
-  fine-tune before adding perceptual/GAN losses.
-- Initialize from the Stage 3 best checkpoint.
-- Train only timesteps `0..100`, matching the sampled SR path where
-  `--start-timestep 50` worked best.
-- Add a small x0 latent reconstruction loss to preserve fidelity while
-  sharpening the diffusion correction.
+- Current stage.
+- First conservative Stage 4-lite low-timestep fine-tune is complete. It
+  improved one-step diagnostics but not the fixed 32-step sampled eval, so it
+  is not promoted over Stage 3.
+- The next experiment is condition-start fine-tuning, initialized from the
+  Stage 3 best checkpoint. It trains low timesteps `25..100`, but starts the
+  training noisy latent from the Stage 2 condition latent so the train path
+  better matches `infer_diffusion.py --init condition`.
+- It uses a small effective-noise loss plus a stronger x0 latent reconstruction
+  loss to preserve fidelity.
 - Use carefully, because later perceptual/GAN tuning can improve apparent
   sharpness while hurting fidelity.
 
@@ -492,6 +539,14 @@ Run the Stage 4-lite low-timestep fine-tune:
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
   --config configs/diffusion_photo10k_b32_stage4_lowt.yaml \
+  --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
+```
+
+Run the Stage 4 condition-start fine-tune:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
+  --config configs/diffusion_photo10k_b32_stage4_condition.yaml \
   --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
 ```
 

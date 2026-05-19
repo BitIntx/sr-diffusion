@@ -224,6 +224,22 @@ def sample_train_timesteps(
     return torch.randint(min_timestep, max_timestep + 1, (batch_size,), device=device, dtype=torch.long)
 
 
+def make_diffusion_inputs(
+    scheduler: NoiseScheduler,
+    target_latent: torch.Tensor,
+    condition: torch.Tensor,
+    noise: torch.Tensor,
+    timesteps: torch.Tensor,
+    init_mode: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if init_mode == "target":
+        return scheduler.add_noise(target_latent, noise, timesteps), noise
+    if init_mode == "condition":
+        noisy = scheduler.add_noise(condition, noise, timesteps)
+        return noisy, scheduler.noise_from_x0(noisy, target_latent, timesteps)
+    raise ValueError(f"Unsupported diffusion init mode: {init_mode}")
+
+
 def make_latents(
     vae: AutoencoderKL,
     condition_encoder: LRToLatentPredictor,
@@ -255,6 +271,7 @@ def evaluate(
     dtype_name: str,
     train_condition_encoder: bool,
     eval_timestep: int,
+    init_mode: str,
 ) -> dict[str, float]:
     model_was_training = model.training
     cond_was_training = condition_encoder.training
@@ -279,12 +296,14 @@ def evaluate(
                     vae, condition_encoder, hr, lr, domain_id, dtype_name, train_condition_encoder=False
                 )
                 noise = torch.randn_like(target_latent)
-                noisy = scheduler.add_noise(target_latent, noise, timestep)
+                noisy, target_noise = make_diffusion_inputs(
+                    scheduler, target_latent, condition, noise, timestep, init_mode
+                )
                 predicted_noise = model(noisy, timestep, condition, domain_id)
                 x0 = scheduler.predict_x0_from_noise(noisy, timestep, predicted_noise)
                 decoded = vae.decode(x0)
                 target = normalize_image(hr)
-                noise_mse = F.mse_loss(predicted_noise, noise)
+                noise_mse = F.mse_loss(predicted_noise, target_noise)
                 x0_mse = F.mse_loss(x0, target_latent)
                 decoded_mse = F.mse_loss(decoded, target)
             totals["noise_mse"] += float(noise_mse.detach().cpu()) * batch_size
@@ -353,6 +372,9 @@ def main() -> None:
     eval_every = int(eval_cfg.get("every", 1000))
     eval_run_at_start = bool(eval_cfg.get("run_at_start", True))
     eval_timestep = int(eval_cfg.get("timestep", config.get("diffusion", {}).get("sample_timestep", 500)))
+    diffusion_cfg = config.get("diffusion", {})
+    train_init_mode = str(diffusion_cfg.get("train_init", "target"))
+    eval_init_mode = str(eval_cfg.get("init", "target"))
     if eval_enabled:
         eval_dataset = make_dataset(config, split=str(eval_cfg.get("split", "val")), seed=seed, deterministic=True)
         limit = int(eval_cfg.get("limit", 0))
@@ -373,15 +395,15 @@ def main() -> None:
             f"split={eval_cfg.get('split', 'val')} "
             f"limit={eval_cfg.get('limit', 0)} "
             f"batch_size={eval_cfg.get('batch_size', train_cfg.get('batch_size', 1))} "
-            f"timestep={eval_timestep}"
+            f"timestep={eval_timestep} "
+            f"init={eval_init_mode}"
         )
 
     vae = load_autoencoder(config, device=device)
     condition_encoder, train_condition_encoder = load_condition_encoder(config, device=device)
     model = ConditionalUNet.from_config(config["model"]).to(device)
-    diffusion_cfg = config.get("diffusion", {})
     scheduler = NoiseScheduler.from_config(diffusion_cfg)
-    print(f"diffusion_timesteps={scheduler.num_train_timesteps}")
+    print(f"diffusion_timesteps={scheduler.num_train_timesteps} train_init={train_init_mode}")
 
     parameters = list(model.parameters())
     if train_condition_encoder:
@@ -406,6 +428,7 @@ def main() -> None:
     sample_every = int(train_cfg.get("sample_every", 500))
     grad_accum_steps = int(train_cfg.get("grad_accum_steps", 1))
     loss_cfg = config.get("loss", {})
+    noise_loss_weight = float(loss_cfg.get("noise_weight", 1.0))
     x0_loss_weight = float(loss_cfg.get("x0_weight", 0.0))
     best_metric = str(eval_cfg.get("best_metric", "eval/noise_mse"))
     best_mode = str(eval_cfg.get("best_mode", "min"))
@@ -448,16 +471,18 @@ def main() -> None:
                     device=device,
                     diffusion_config=diffusion_cfg,
                 )
-                noisy = scheduler.add_noise(target_latent, noise, timesteps)
+                noisy, target_noise = make_diffusion_inputs(
+                    scheduler, target_latent, condition, noise, timesteps, train_init_mode
+                )
                 predicted_noise = model(noisy, timesteps, condition, domain_id)
-                noise_loss = F.mse_loss(predicted_noise, noise)
+                noise_loss = F.mse_loss(predicted_noise, target_noise)
                 if x0_loss_weight > 0.0:
                     predicted_x0 = scheduler.predict_x0_from_noise(noisy, timesteps, predicted_noise)
                     x0_loss = F.mse_loss(predicted_x0, target_latent)
-                    loss = noise_loss + x0_loss_weight * x0_loss
+                    loss = noise_loss_weight * noise_loss + x0_loss_weight * x0_loss
                 else:
                     x0_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
-                    loss = noise_loss
+                    loss = noise_loss_weight * noise_loss
                 scaled_loss = loss / grad_accum_steps
 
             scaled_loss.backward()
@@ -505,6 +530,7 @@ def main() -> None:
                     dtype_name,
                     train_condition_encoder,
                     eval_timestep,
+                    eval_init_mode,
                 )
                 (eval_dir / f"step_{step:07d}_metrics.json").write_text(
                     json.dumps({"step": step, "metrics": metrics}, indent=2, sort_keys=True) + "\n",
@@ -523,6 +549,9 @@ def main() -> None:
 
             if step % sample_every == 0 or step == 1:
                 sample_source = fixed_sample_batch if fixed_sample_batch is not None else batch
+                sample_init_mode = str(
+                    config.get("logging", {}).get("samples", {}).get("init", eval_init_mode)
+                )
                 with torch.no_grad():
                     sample_hr = sample_source["hr"].to(device, non_blocking=True)
                     sample_lr = sample_source["lr"].to(device, non_blocking=True)
@@ -539,7 +568,14 @@ def main() -> None:
                             vae, condition_encoder, sample_hr, sample_lr, sample_domain, dtype_name, False
                         )
                         sample_noise = torch.randn_like(sample_target_latent)
-                        sample_noisy = scheduler.add_noise(sample_target_latent, sample_noise, timestep)
+                        sample_noisy, _ = make_diffusion_inputs(
+                            scheduler,
+                            sample_target_latent,
+                            sample_condition,
+                            sample_noise,
+                            timestep,
+                            sample_init_mode,
+                        )
                         sample_pred_noise = model(sample_noisy, timestep, sample_condition, sample_domain)
                         sample_x0 = scheduler.predict_x0_from_noise(sample_noisy, timestep, sample_pred_noise)
                         sample_decoded = vae.decode(sample_x0)
