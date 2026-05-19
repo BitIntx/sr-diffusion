@@ -21,16 +21,16 @@ from sr_diffusion.utils import autocast_context, get_device, load_config
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Stage 3 conditional diffusion SR sampling.")
-    parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--config", type=Path, default=Path("configs/hf/diffusion_stage4_condition.yaml"))
+    parser.add_argument("--checkpoint", type=Path, default=None)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--input-lr", type=Path, help="Low-resolution RGB input image.")
     input_group.add_argument("--input-hr", type=Path, help="HR image to center-crop and degrade for controlled eval.")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--domain", default="photo")
-    parser.add_argument("--steps", type=int, default=50)
+    parser.add_argument("--steps", type=int, default=None)
     parser.add_argument("--eta", type=float, default=0.0)
-    parser.add_argument("--init", choices=("noise", "condition"), default="condition")
+    parser.add_argument("--init", choices=("noise", "condition"), default=None)
     parser.add_argument("--start-timestep", type=int, default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--num-samples", type=int, default=1)
@@ -51,11 +51,39 @@ def tensor_to_pil(image: torch.Tensor) -> Image.Image:
     return Image.fromarray(array, mode="RGB")
 
 
+def resolve_path(config: dict, value: str | Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    cwd_path = Path.cwd() / path
+    if cwd_path.exists():
+        return cwd_path
+    config_path = config.get("_config_path")
+    if config_path:
+        config_relative = Path(config_path).parent / path
+        if config_relative.exists():
+            return config_relative
+        if path.parts and path.parts[0] in (".", ".."):
+            return config_relative
+        if len(path.parts) == 1:
+            return config_relative
+    return cwd_path
+
+
+def resolve_checkpoint_arg(args: argparse.Namespace, config: dict) -> Path:
+    if args.checkpoint is not None:
+        return resolve_path(config, args.checkpoint)
+    checkpoint = config.get("inference", {}).get("checkpoint") or config.get("checkpoint")
+    if checkpoint is None:
+        raise ValueError("No checkpoint provided. Pass --checkpoint or set inference.checkpoint in the config.")
+    return resolve_path(config, checkpoint)
+
+
 def load_autoencoder(config: dict, device: torch.device) -> AutoencoderKL:
     auto_cfg = config["autoencoder"]
-    vae_config = load_config(auto_cfg["config"])
+    vae_config = load_config(resolve_path(config, auto_cfg["config"]))
     vae = AutoencoderKL.from_config(vae_config["model"]).to(device)
-    checkpoint = torch.load(auto_cfg["checkpoint"], map_location=device)
+    checkpoint = torch.load(resolve_path(config, auto_cfg["checkpoint"]), map_location=device)
     vae.load_state_dict(checkpoint["model"])
     vae.eval()
     return vae
@@ -63,9 +91,9 @@ def load_autoencoder(config: dict, device: torch.device) -> AutoencoderKL:
 
 def load_condition_encoder(config: dict, device: torch.device) -> LRToLatentPredictor:
     cond_cfg = config["condition_encoder"]
-    cond_config = load_config(cond_cfg["config"])
+    cond_config = load_config(resolve_path(config, cond_cfg["config"]))
     encoder = LRToLatentPredictor.from_config(cond_config["model"]).to(device)
-    checkpoint = torch.load(cond_cfg["checkpoint"], map_location=device)
+    checkpoint = torch.load(resolve_path(config, cond_cfg["checkpoint"]), map_location=device)
     encoder.load_state_dict(checkpoint["model"])
     encoder.eval()
     return encoder
@@ -200,6 +228,10 @@ def ddim_sample(
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
+    checkpoint_path = resolve_checkpoint_arg(args, config)
+    inference_config = config.get("inference", {})
+    steps = int(args.steps if args.steps is not None else inference_config.get("steps", 50))
+    init = str(args.init or inference_config.get("init", "condition"))
     device = get_device(args.device)
     dtype_name = config["train"].get("dtype", "bf16")
     data_config = config["data"]
@@ -217,15 +249,15 @@ def main() -> None:
 
     vae = load_autoencoder(config, device)
     condition_encoder = load_condition_encoder(config, device)
-    model, checkpoint_step = load_unet(config, args.checkpoint, device)
+    model, checkpoint_step = load_unet(config, checkpoint_path, device)
     scheduler = NoiseScheduler.from_config(config.get("diffusion", {}))
     start_timestep = resolve_start_timestep(config, args.start_timestep)
 
     lr_tensor = pil_to_tensor(lr_image).unsqueeze(0).repeat(args.num_samples, 1, 1, 1).to(device)
     domain_id = torch.full((args.num_samples,), int(domains[args.domain]), device=device, dtype=torch.long)
     print(
-        f"checkpoint_step={checkpoint_step} lr_size={lr_image.size} steps={args.steps} "
-        f"eta={args.eta} init={args.init} start_timestep={start_timestep} "
+        f"checkpoint_step={checkpoint_step} lr_size={lr_image.size} steps={steps} "
+        f"eta={args.eta} init={init} start_timestep={start_timestep} "
         f"samples={args.num_samples} device={device}"
     )
 
@@ -236,9 +268,9 @@ def main() -> None:
         scheduler=scheduler,
         lr=lr_tensor,
         domain_id=domain_id,
-        steps=args.steps,
+        steps=steps,
         eta=args.eta,
-        init=args.init,
+        init=init,
         start_timestep=start_timestep,
         dtype_name=dtype_name,
         seed=args.seed,

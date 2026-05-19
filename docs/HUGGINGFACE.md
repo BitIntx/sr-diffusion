@@ -24,6 +24,29 @@ print(whoami()["name"])
 PY
 ```
 
+## Download For Inference
+
+From a fresh GitHub clone, install dependencies and download the selected public
+prototype checkpoints:
+
+```bash
+python scripts/download_hf_checkpoints.py
+```
+
+This creates the local `checkpoints/` files expected by
+`configs/hf/diffusion_stage4_condition.yaml`.
+
+Run the default Stage 4 condition-start prototype:
+
+```bash
+python infer_diffusion.py \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/demo
+```
+
+The default `infer_diffusion.py` config is the HF-friendly Stage 4 config. It
+uses relative checkpoint paths, so it works outside the original training VM.
+
 ## Upload Selected Artifacts
 
 Upload the selected Stage 1 VAE and the current Stage 2 checkpoint:

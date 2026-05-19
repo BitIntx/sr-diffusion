@@ -1,0 +1,11 @@
+project:
+  name: latent_pretrain_stage2_hf
+
+model:
+  type: lr_to_latent_predictor
+  in_channels: 3
+  latent_channels: 16
+  base_channels: 128
+  num_blocks: 8
+  norm_groups: 32
+  num_domains: 2

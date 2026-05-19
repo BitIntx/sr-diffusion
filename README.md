@@ -363,6 +363,67 @@ jwheo/sr-diffusion
 Upload only selected checkpoints/configs/metrics, not raw datasets. See
 [docs/HUGGINGFACE.md](docs/HUGGINGFACE.md) for the exact upload commands.
 
+## Quick Prototype Inference
+
+The public Hugging Face prototype can be downloaded and run from a fresh clone.
+It uses the current 10k Stage 4 condition-start checkpoint, not the in-progress
+photo100k training run.
+
+Install PyTorch for the target machine first. For this ROCm VM:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/rocm7.2
+pip install -e .
+```
+
+Download the selected public checkpoints from Hugging Face:
+
+```bash
+python scripts/download_hf_checkpoints.py
+```
+
+Run x4 SR from an LR image. The default HF config expects a 128x128 LR crop and
+writes a 512x512 output:
+
+```bash
+python infer_diffusion.py \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/demo
+```
+
+For a controlled smoke test from an HR image, let the script center-crop HR and
+create the degraded LR input first:
+
+```bash
+python infer_diffusion.py \
+  --input-hr /path/to/hr_image.png \
+  --output-dir outputs/demo_from_hr \
+  --seed 123
+```
+
+The output is `sr_00.png`. The default config is
+`configs/hf/diffusion_stage4_condition.yaml`, which points at:
+
+```text
+checkpoints/stage1_autoencoder_best_eval_recon.pt
+checkpoints/stage2_latent_pretrain_best_eval_latent.pt
+checkpoints/stage4_condition_b32_best_eval_condition_decoded.pt
+```
+
+To compare the earlier Stage 3 baseline instead:
+
+```bash
+python infer_diffusion.py \
+  --config configs/hf/diffusion_stage3_baseline.yaml \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/stage3_demo
+```
+
+These are research checkpoints under a non-commercial license. They are useful
+for inspecting the prototype behavior, not yet a polished production SR model.
+
 ## License
 
 Code is released under the [PolyForm Noncommercial License 1.0.0](LICENSE).

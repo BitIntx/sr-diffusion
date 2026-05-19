@@ -1,0 +1,48 @@
+project:
+  name: diffusion_stage3_baseline_hf
+
+autoencoder:
+  config: autoencoder_stage1.yaml
+  checkpoint: ../../checkpoints/stage1_autoencoder_best_eval_recon.pt
+
+condition_encoder:
+  config: latent_pretrain_stage2.yaml
+  checkpoint: ../../checkpoints/stage2_latent_pretrain_best_eval_latent.pt
+  trainable: false
+
+data:
+  hr_size: 512
+  scale: 4
+  degradation_preset: mild
+  domains:
+    photo: 0
+    anime: 1
+
+model:
+  type: conditional_unet
+  latent_channels: 16
+  condition_channels: 16
+  out_channels: 16
+  base_channels: 128
+  channel_multipliers: [1, 2, 3, 4]
+  num_res_blocks: 2
+  norm_groups: 32
+  num_heads: 4
+  attention_resolutions: [32, 16]
+  base_resolution: 128
+  num_domains: 2
+
+diffusion:
+  num_train_timesteps: 1000
+  beta_schedule: linear
+  beta_start: 0.0001
+  beta_end: 0.02
+  sample_timestep: 500
+
+train:
+  dtype: bf16
+
+inference:
+  checkpoint: ../../checkpoints/stage3_diffusion_b32_best_eval_noise.pt
+  init: condition
+  steps: 32
