@@ -29,6 +29,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-steps", type=int, default=None)
     parser.add_argument("--resume", type=Path, default=None)
     parser.add_argument("--init-checkpoint", type=Path, default=None)
+    parser.add_argument(
+        "--init-condition-encoder",
+        action="store_true",
+        help="Also load condition_encoder weights from --init-checkpoint. By default init uses the config checkpoint.",
+    )
     return parser.parse_args()
 
 
@@ -203,10 +208,11 @@ def load_model_weights(
     model: torch.nn.Module,
     condition_encoder: LRToLatentPredictor,
     device: torch.device,
+    load_condition_encoder: bool = False,
 ) -> int:
     checkpoint = torch.load(path, map_location=device)
     model.load_state_dict(checkpoint["model"])
-    if "condition_encoder" in checkpoint:
+    if load_condition_encoder and "condition_encoder" in checkpoint:
         condition_encoder.load_state_dict(checkpoint["condition_encoder"])
     return int(checkpoint.get("step", 0))
 
@@ -419,8 +425,17 @@ def main() -> None:
         start_step = load_checkpoint(args.resume, model, condition_encoder, optimizer, device)
         print(f"resumed step={start_step}")
     elif args.init_checkpoint:
-        init_step = load_model_weights(args.init_checkpoint, model, condition_encoder, device)
-        print(f"initialized_from={args.init_checkpoint} source_step={init_step}")
+        init_step = load_model_weights(
+            args.init_checkpoint,
+            model,
+            condition_encoder,
+            device,
+            load_condition_encoder=bool(args.init_condition_encoder),
+        )
+        print(
+            f"initialized_from={args.init_checkpoint} source_step={init_step} "
+            f"loaded_init_condition_encoder={bool(args.init_condition_encoder)}"
+        )
 
     max_steps = int(args.limit_steps or train_cfg.get("max_steps", 1000))
     log_every = int(train_cfg.get("log_every", 50))
