@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--limit-steps", type=int, default=None)
     parser.add_argument("--resume", type=Path, default=None)
+    parser.add_argument("--init-checkpoint", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -197,6 +198,32 @@ def load_checkpoint(
     return int(checkpoint.get("step", 0))
 
 
+def load_model_weights(
+    path: Path,
+    model: torch.nn.Module,
+    condition_encoder: LRToLatentPredictor,
+    device: torch.device,
+) -> int:
+    checkpoint = torch.load(path, map_location=device)
+    model.load_state_dict(checkpoint["model"])
+    if "condition_encoder" in checkpoint:
+        condition_encoder.load_state_dict(checkpoint["condition_encoder"])
+    return int(checkpoint.get("step", 0))
+
+
+def sample_train_timesteps(
+    scheduler: NoiseScheduler,
+    batch_size: int,
+    device: torch.device,
+    diffusion_config: dict[str, Any],
+) -> torch.Tensor:
+    min_timestep = int(diffusion_config.get("train_min_timestep", 0))
+    max_timestep = int(diffusion_config.get("train_max_timestep", scheduler.num_train_timesteps - 1))
+    min_timestep = max(0, min(min_timestep, scheduler.num_train_timesteps - 1))
+    max_timestep = max(min_timestep, min(max_timestep, scheduler.num_train_timesteps - 1))
+    return torch.randint(min_timestep, max_timestep + 1, (batch_size,), device=device, dtype=torch.long)
+
+
 def make_latents(
     vae: AutoencoderKL,
     condition_encoder: LRToLatentPredictor,
@@ -352,7 +379,8 @@ def main() -> None:
     vae = load_autoencoder(config, device=device)
     condition_encoder, train_condition_encoder = load_condition_encoder(config, device=device)
     model = ConditionalUNet.from_config(config["model"]).to(device)
-    scheduler = NoiseScheduler.from_config(config.get("diffusion", {}))
+    diffusion_cfg = config.get("diffusion", {})
+    scheduler = NoiseScheduler.from_config(diffusion_cfg)
     print(f"diffusion_timesteps={scheduler.num_train_timesteps}")
 
     parameters = list(model.parameters())
@@ -368,12 +396,20 @@ def main() -> None:
     if args.resume:
         start_step = load_checkpoint(args.resume, model, condition_encoder, optimizer, device)
         print(f"resumed step={start_step}")
+    elif args.init_checkpoint:
+        init_step = load_model_weights(args.init_checkpoint, model, condition_encoder, device)
+        print(f"initialized_from={args.init_checkpoint} source_step={init_step}")
 
     max_steps = int(args.limit_steps or train_cfg.get("max_steps", 1000))
     log_every = int(train_cfg.get("log_every", 50))
     save_every = int(train_cfg.get("save_every", 1000))
     sample_every = int(train_cfg.get("sample_every", 500))
     grad_accum_steps = int(train_cfg.get("grad_accum_steps", 1))
+    loss_cfg = config.get("loss", {})
+    x0_loss_weight = float(loss_cfg.get("x0_weight", 0.0))
+    best_metric = str(eval_cfg.get("best_metric", "eval/noise_mse"))
+    best_mode = str(eval_cfg.get("best_mode", "min"))
+    best_checkpoint = str(eval_cfg.get("best_checkpoint", "best_eval_noise.pt"))
 
     run = init_wandb(config, output_dir, model)
     wandb_log(
@@ -389,7 +425,7 @@ def main() -> None:
     model.train()
     condition_encoder.train(mode=train_condition_encoder)
     step = start_step
-    best_eval = float("inf")
+    best_eval = float("-inf") if best_mode == "max" else float("inf")
     last_log = time.time()
     last_log_step = step
     optimizer.zero_grad(set_to_none=True)
@@ -406,10 +442,22 @@ def main() -> None:
                     vae, condition_encoder, hr, lr, domain_id, dtype_name, train_condition_encoder
                 )
                 noise = torch.randn_like(target_latent)
-                timesteps = scheduler.sample_timesteps(int(target_latent.shape[0]), device=device)
+                timesteps = sample_train_timesteps(
+                    scheduler,
+                    int(target_latent.shape[0]),
+                    device=device,
+                    diffusion_config=diffusion_cfg,
+                )
                 noisy = scheduler.add_noise(target_latent, noise, timesteps)
                 predicted_noise = model(noisy, timesteps, condition, domain_id)
-                loss = F.mse_loss(predicted_noise, noise)
+                noise_loss = F.mse_loss(predicted_noise, noise)
+                if x0_loss_weight > 0.0:
+                    predicted_x0 = scheduler.predict_x0_from_noise(noisy, timesteps, predicted_noise)
+                    x0_loss = F.mse_loss(predicted_x0, target_latent)
+                    loss = noise_loss + x0_loss_weight * x0_loss
+                else:
+                    x0_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                    loss = noise_loss
                 scaled_loss = loss / grad_accum_steps
 
             scaled_loss.backward()
@@ -423,13 +471,17 @@ def main() -> None:
                 last_log = time.time()
                 last_log_step = step
                 print(
-                    f"step={step} noise_mse={float(loss.detach().cpu()):.5f} "
+                    f"step={step} loss={float(loss.detach().cpu()):.5f} "
+                    f"noise_mse={float(noise_loss.detach().cpu()):.5f} "
+                    f"x0_mse={float(x0_loss.detach().cpu()):.5f} "
                     f"steps_per_sec={interval_steps / elapsed:.2f}"
                 )
                 wandb_log(
                     run,
                     {
-                        "train/noise_mse": float(loss.detach().cpu()),
+                        "train/loss": float(loss.detach().cpu()),
+                        "train/noise_mse": float(noise_loss.detach().cpu()),
+                        "train/x0_mse": float(x0_loss.detach().cpu()),
                         "train/lr": optimizer.param_groups[0]["lr"],
                         "system/steps_per_sec": interval_steps / elapsed,
                     },
@@ -463,9 +515,11 @@ def main() -> None:
                     f"decoded_psnr={metrics['eval/decoded_psnr']:.2f}"
                 )
                 wandb_log(run, metrics, step=step)
-                if metrics["eval/noise_mse"] < best_eval:
-                    best_eval = metrics["eval/noise_mse"]
-                    save_checkpoint(checkpoints_dir / "best_eval_noise.pt", model, condition_encoder, optimizer, step, config)
+                metric_value = metrics[best_metric]
+                improved = metric_value > best_eval if best_mode == "max" else metric_value < best_eval
+                if improved:
+                    best_eval = metric_value
+                    save_checkpoint(checkpoints_dir / best_checkpoint, model, condition_encoder, optimizer, step, config)
 
             if step % sample_every == 0 or step == 1:
                 sample_source = fixed_sample_batch if fixed_sample_batch is not None else batch

@@ -477,9 +477,23 @@ Stage 3: conditional latent diffusion
 
 Stage 4: perceptual / GAN fine-tune
 
-- Later-stage quality tuning after diffusion works.
-- Use carefully, because perceptual/GAN tuning can improve apparent sharpness
-  while hurting fidelity.
+- Current next step is a conservative Stage 4-lite low-timestep diffusion
+  fine-tune before adding perceptual/GAN losses.
+- Initialize from the Stage 3 best checkpoint.
+- Train only timesteps `0..100`, matching the sampled SR path where
+  `--start-timestep 50` worked best.
+- Add a small x0 latent reconstruction loss to preserve fidelity while
+  sharpening the diffusion correction.
+- Use carefully, because later perceptual/GAN tuning can improve apparent
+  sharpness while hurting fidelity.
+
+Run the Stage 4-lite low-timestep fine-tune:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
+  --config configs/diffusion_photo10k_b32_stage4_lowt.yaml \
+  --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
+```
 
 Stage 5: few-step distillation
 
