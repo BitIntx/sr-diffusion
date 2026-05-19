@@ -26,7 +26,7 @@ autoencoder:
 
 condition_encoder:
   config: configs/latent_pretrain_photo100k.yaml
-  checkpoint: /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b32/checkpoints/best_eval_latent.pt
+  checkpoint: /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b128/checkpoints/best_eval_latent.pt
   trainable: false
 
 data:

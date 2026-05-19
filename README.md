@@ -139,6 +139,9 @@ Next scale-up Stage 2 config:
 configs/latent_pretrain_photo100k.yaml
 ```
 
+This run uses batch size `128` on MI300X and `max_steps: 20000`, which is about
+24.7 passes over the 103,450-image training split.
+
 Current Stage 2 run name:
 
 ```text

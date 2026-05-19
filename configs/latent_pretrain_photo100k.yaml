@@ -1,15 +1,15 @@
 project:
-  name: latent_pretrain_photo100k_b32
-  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b32
+  name: latent_pretrain_photo100k_b128
+  output_dir: /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b128
 
 logging:
   wandb:
     enabled: true
     project: sr-diffusion
-    name: latent_pretrain_photo100k_b32
+    name: latent_pretrain_photo100k_b128
     mode: online
     dir: /home/jwheojjang/scratch/sr-diffusion/wandb
-    tags: [stage2, latent-pretrain, photo100k, b32, init-10k]
+    tags: [stage2, latent-pretrain, photo100k, b128, init-10k]
     watch: false
   samples:
     enabled: true
@@ -47,20 +47,20 @@ model:
 train:
   device: auto
   dtype: bf16
-  batch_size: 32
-  max_steps: 60000
+  batch_size: 128
+  max_steps: 20000
   lr: 0.0001
   weight_decay: 0.0
   grad_accum_steps: 1
   log_every: 50
-  save_every: 2000
+  save_every: 1000
   sample_every: 1000
 
 eval:
   enabled: true
   split: val
   limit: 100
-  batch_size: 32
+  batch_size: 64
   num_workers: 8
   every: 1000
   run_at_start: true
