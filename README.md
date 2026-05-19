@@ -498,6 +498,7 @@ src/sr_diffusion/         package code
 train_autoencoder.py      Stage 1 training entrypoint
 train_latent_pretrain.py  Stage 2 deterministic latent pretraining entrypoint
 train_diffusion.py        Stage 3 conditional diffusion training entrypoint
+infer_diffusion.py        Stage 3 DDIM/img2img SR sampling entrypoint
 eval_autoencoder.py       standalone VAE eval entrypoint
 infer_reconstruct.py      reconstruction smoke/inference
 tests/                    unit tests
@@ -534,6 +535,34 @@ Run a tiny Stage 3 smoke test:
   --config configs/diffusion_scratch_tiny.yaml \
   --limit-steps 1
 ```
+
+Run Stage 3 sampling from an HR image by creating a controlled LR input first:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python infer_diffusion.py \
+  --config configs/diffusion_photo10k_b32.yaml \
+  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt \
+  --input-hr /path/to/hr_image.png \
+  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/infer_diffusion_sample \
+  --steps 32 \
+  --seed 123
+```
+
+Run Stage 3 sampling from an existing LR image:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python infer_diffusion.py \
+  --config configs/diffusion_photo10k_b32.yaml \
+  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt \
+  --input-lr /path/to/lr_128.png \
+  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/infer_diffusion_sample \
+  --steps 32 \
+  --seed 123
+```
+
+The default sampler starts from the Stage 2 condition latent with noise added
+(`--init condition`). Pure noise sampling is available with `--init noise`, but
+the current Stage 3 checkpoint is more stable in condition-initialized mode.
 
 Reconstruct one image:
 

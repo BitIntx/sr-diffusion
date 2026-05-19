@@ -122,7 +122,7 @@ weights.
 
 - Stage 1: factor-4 VAE / Autoencoder over 512px HR crops.
 - Stage 2: deterministic LR-to-HR-latent pretraining with the Stage 1 VAE frozen.
-- Stage 3: conditional latent diffusion U-Net, planned.
+- Stage 3: conditional latent diffusion U-Net.
 """
 
 
