@@ -133,7 +133,7 @@ def ddim_sample(
     generator = torch.Generator(device=device)
     generator.manual_seed(seed)
     if start_timestep is None and init == "condition":
-        start_timestep = min(int(scheduler.num_train_timesteps) - 1, int(steps) * 10)
+        start_timestep = min(int(scheduler.num_train_timesteps) - 1, 50)
     timesteps = make_timesteps(scheduler.num_train_timesteps, steps, device=device, start_timestep=start_timestep)
     lr_input = lr.mul(2.0).sub(1.0)
     with torch.no_grad(), autocast_context(device, dtype_name):

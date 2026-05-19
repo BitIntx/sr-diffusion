@@ -163,6 +163,15 @@ batch size: 32
 max steps: 25000
 ```
 
+Current sampled Stage 3 eval, using `--init condition`, `--start-timestep 50`,
+and 32 DDIM steps on 32 fixed validation images:
+
+```text
+mean bicubic PSNR: 24.66
+mean SR PSNR:      25.55
+mean delta:        +0.89 dB
+```
+
 At `batch_size=16`, one epoch is:
 
 ```text
@@ -560,9 +569,26 @@ Run Stage 3 sampling from an existing LR image:
   --seed 123
 ```
 
-The default sampler starts from the Stage 2 condition latent with noise added
-(`--init condition`). Pure noise sampling is available with `--init noise`, but
-the current Stage 3 checkpoint is more stable in condition-initialized mode.
+The default sampler starts from the Stage 2 condition latent with light noise
+added (`--init condition`, `--start-timestep 50`). Pure noise sampling is
+available with `--init noise`, but the current Stage 3 checkpoint is more stable
+in condition-initialized mode.
+
+Run a small sampled validation sweep and compare against bicubic:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python eval_diffusion_samples.py \
+  --config configs/diffusion_photo10k_b32.yaml \
+  --checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt \
+  --output-dir /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_b32_val8_32step \
+  --split val \
+  --limit 8 \
+  --steps 32 \
+  --seed 1337
+```
+
+The sampled eval grid is written as `grid_lr_bicubic_sr_gt.png`, with columns in
+this order: LR nearest, bicubic, SR, GT.
 
 Reconstruct one image:
 
