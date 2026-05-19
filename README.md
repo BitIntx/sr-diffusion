@@ -53,8 +53,9 @@ Constraints:
 
 ## Current Status
 
-We finished the first **Stage 1: VAE / Autoencoder** pass and are now starting
-**Stage 2: deterministic LR -> HR latent pretraining**.
+We finished the first **Stage 1: VAE / Autoencoder** pass and the first
+**Stage 2: deterministic LR -> HR latent pretraining** pass. We are now moving
+into **Stage 3: conditional latent diffusion**.
 
 Implemented:
 
@@ -78,6 +79,7 @@ Implemented:
 - Standalone checkpoint eval script.
 - Scratch recovery scripts for ephemeral VM storage.
 - Stage 2 LR-to-latent predictor and training loop.
+- Stage 3 conditional U-Net, noise scheduler, and diffusion training loop.
 
 Stage 1 training config:
 
@@ -129,6 +131,34 @@ Current Stage 2 run name:
 
 ```text
 latent_pretrain_photo10k_b16
+```
+
+Selected Stage 2 checkpoint:
+
+```text
+/home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/checkpoints/best_eval_latent.pt
+```
+
+Stage 2 final result:
+
+```text
+finished step: 50000
+best eval latent loss: step 48000, eval/latent_loss 0.21775
+best decoded PSNR proxy: step 47000, eval/decoded_psnr 23.89
+```
+
+Current Stage 3 config:
+
+```text
+configs/diffusion_photo10k.yaml
+```
+
+Current Stage 3 model:
+
+```text
+conditional U-Net params: 76.6M
+frozen Stage 2 condition encoder params: 2.4M
+latent shape: 16 x 128 x 128
 ```
 
 At `batch_size=16`, one epoch is:
@@ -280,6 +310,26 @@ Watch the Stage 2 log:
 tail -f /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/train_tmux.log
 ```
 
+Run the current Stage 3 conditional diffusion config:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
+  --config configs/diffusion_photo10k.yaml
+```
+
+Recommended Stage 3 tmux launch:
+
+```bash
+tmux new-session -d -s sr_stage3 \
+  'cd /home/jwheojjang/sr-diffusion && env PYTHONUNBUFFERED=1 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py --config configs/diffusion_photo10k.yaml > /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b8/train_tmux.log 2>&1'
+```
+
+Watch the Stage 3 log:
+
+```bash
+tail -f /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b8/train_tmux.log
+```
+
 Watch GPU usage:
 
 ```bash
@@ -389,7 +439,7 @@ Stage 1: VAE / Autoencoder
 
 Stage 2: deterministic LR -> HR latent pretrain
 
-- Current stage.
+- Done for the first pass.
 - Freeze the selected Stage 1 VAE.
 - Train an LR-to-latent predictor that maps degraded LR inputs to HR VAE
   encoder means.
@@ -405,11 +455,13 @@ Run the current Stage 2 pretraining config:
 
 Stage 3: conditional latent diffusion
 
+- Current stage.
 - Train diffusion U-Net over HR latents.
 - Conditioning:
-  - multi-scale LR features
+  - frozen Stage 2 LR-to-latent condition encoder
   - timestep embedding
   - photo/anime domain embedding
+- Initial model size is 76.6M trainable U-Net parameters.
 - Target model size is roughly 250M-500M parameters after the pipeline is stable.
 
 Stage 4: perceptual / GAN fine-tune
@@ -440,9 +492,10 @@ src/sr_diffusion/         package code
   degradations/           x4 LR degradation pipeline
   eval/                   eval helpers
   losses/                 reconstruction/KL losses
-  models/                 AutoencoderKL and future models
+  models/                 AutoencoderKL, LR predictor, diffusion U-Net
 train_autoencoder.py      Stage 1 training entrypoint
 train_latent_pretrain.py  Stage 2 deterministic latent pretraining entrypoint
+train_diffusion.py        Stage 3 conditional diffusion training entrypoint
 eval_autoencoder.py       standalone VAE eval entrypoint
 infer_reconstruct.py      reconstruction smoke/inference
 tests/                    unit tests
@@ -470,6 +523,14 @@ Run unit tests:
 
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python -m pytest
+```
+
+Run a tiny Stage 3 smoke test:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
+  --config configs/diffusion_scratch_tiny.yaml \
+  --limit-steps 1
 ```
 
 Reconstruct one image:
