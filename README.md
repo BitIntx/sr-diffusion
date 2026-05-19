@@ -133,6 +133,12 @@ Current Stage 2 config:
 configs/latent_pretrain_photo10k.yaml
 ```
 
+Next scale-up Stage 2 config:
+
+```text
+configs/latent_pretrain_photo100k.yaml
+```
+
 Current Stage 2 run name:
 
 ```text
@@ -157,6 +163,12 @@ Current Stage 3 config:
 
 ```text
 configs/diffusion_photo10k_b32.yaml
+```
+
+Next scale-up Stage 3 config:
+
+```text
+configs/diffusion_photo100k_b32.yaml
 ```
 
 Current Stage 3 model:
@@ -263,6 +275,17 @@ The 10k photo set is built from:
 - Flickr2K HR.
 - A deterministic subset of COCO train2017.
 
+The active scale-up target is:
+
+```text
+/home/jwheojjang/scratch/sr-diffusion/data/manifest_photo100k.csv
+```
+
+It is built from DF2K plus 100,000 deterministic COCO train2017 images selected
+with short side `>=320`, for about 103,550 training images and 100 validation
+images. COCO only has 45,897 train2017 images with short side `>=480`, so the
+stricter high-resolution-only variant is closer to photo50k.
+
 LR images are not stored. They are generated on the fly from HR crops by the
 degradation pipeline. The current `mild` degradation already includes light LR
 noise:
@@ -312,6 +335,12 @@ That recreates:
 - Flickr2K
 - COCO train2017 subset
 - `manifest_photo10k.csv`
+
+To recover the larger photo100k setup after scratch loss:
+
+```bash
+bash scripts/recover_scratch.sh --coco-count 100000
+```
 
 To recover only the smaller DIV2K seed dataset:
 
@@ -370,6 +399,14 @@ Run the current Stage 2 deterministic latent pretraining config:
   --config configs/latent_pretrain_photo10k.yaml
 ```
 
+Run the photo100k Stage 2 scale-up from the selected 10k checkpoint:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_latent_pretrain.py \
+  --config configs/latent_pretrain_photo100k.yaml \
+  --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/checkpoints/best_eval_latent.pt
+```
+
 Recommended Stage 2 tmux launch:
 
 ```bash
@@ -388,6 +425,14 @@ Run the current Stage 3 conditional diffusion config:
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
   --config configs/diffusion_photo10k_b32.yaml
+```
+
+After Stage 2 photo100k finishes, run the photo100k Stage 3 config:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
+  --config configs/diffusion_photo100k_b32.yaml \
+  --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
 ```
 
 Recommended Stage 3 tmux launch:
@@ -512,7 +557,7 @@ Stage 1: VAE / Autoencoder
 
 Stage 2: deterministic LR -> HR latent pretrain
 
-- Done for the first pass.
+- Done for the first 10k pass; photo100k scale-up is the next active pass.
 - Freeze the selected Stage 1 VAE.
 - Train an LR-to-latent predictor that maps degraded LR inputs to HR VAE
   encoder means.
@@ -524,6 +569,14 @@ Run the current Stage 2 pretraining config:
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python train_latent_pretrain.py \
   --config configs/latent_pretrain_photo10k.yaml
+```
+
+Run the photo100k Stage 2 scale-up:
+
+```bash
+/home/jwheojjang/venvs/rocm/bin/python train_latent_pretrain.py \
+  --config configs/latent_pretrain_photo100k.yaml \
+  --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/checkpoints/best_eval_latent.pt
 ```
 
 Stage 3: conditional latent diffusion

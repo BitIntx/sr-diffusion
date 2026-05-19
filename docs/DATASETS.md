@@ -71,6 +71,42 @@ COCO images have varied original licenses because the images come from Flickr.
 Keep this dataset path for study/research experiments and do not redistribute
 the downloaded images from this repository.
 
+## 100k Photo Expansion
+
+The next scale-up uses a deterministic 100,000-image subset of COCO train2017,
+merged with DF2K. This keeps the existing Stage 1 VAE fixed and gives Stage 2
+and Stage 3 broader photo coverage. COCO has only 45,897 images with short side
+`>=480`, so the 100k setup uses `--min-size 320`.
+
+```bash
+bash scripts/recover_scratch.sh --coco-count 100000
+```
+
+Or, if DF2K already exists and only COCO needs to be expanded:
+
+```bash
+python scripts/download_coco2017.py \
+  --target-count 100000 \
+  --min-size 320 \
+  --manifest /home/jwheojjang/scratch/sr-diffusion/data/manifest_coco2017_photo100k.csv \
+  --keep-archive
+python scripts/merge_manifests.py \
+  --inputs \
+    /home/jwheojjang/scratch/sr-diffusion/data/manifest_df2k_photo.csv \
+    /home/jwheojjang/scratch/sr-diffusion/data/manifest_coco2017_photo100k.csv \
+  --output /home/jwheojjang/scratch/sr-diffusion/data/manifest_photo100k.csv
+python scripts/dataset_report.py \
+  --manifest /home/jwheojjang/scratch/sr-diffusion/data/manifest_photo100k.csv \
+  --limit 100
+```
+
+Expected count is about 103,550 training images plus the 100 DIV2K validation
+images preserved by the DF2K manifest.
+
+For a stricter high-resolution-only COCO subset, use `--coco-min-size 480`.
+That currently yields about 49k total photo training images after DF2K is
+merged.
+
 ## Scaling Photo Data
 
 Good next candidates:

@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--limit-steps", type=int, default=None)
     parser.add_argument("--resume", type=Path, default=None)
+    parser.add_argument("--init-checkpoint", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -186,6 +187,12 @@ def load_checkpoint(
     return int(checkpoint.get("step", 0))
 
 
+def load_model_weights(path: Path, model: torch.nn.Module, device: torch.device) -> int:
+    checkpoint = torch.load(path, map_location=device)
+    model.load_state_dict(checkpoint["model"])
+    return int(checkpoint.get("step", 0))
+
+
 def evaluate(
     model: LRToLatentPredictor,
     vae: AutoencoderKL,
@@ -312,6 +319,9 @@ def main() -> None:
     if args.resume:
         start_step = load_checkpoint(args.resume, model, optimizer, device)
         print(f"resumed step={start_step}")
+    elif args.init_checkpoint:
+        init_step = load_model_weights(args.init_checkpoint, model, device)
+        print(f"initialized_from={args.init_checkpoint} source_step={init_step}")
 
     max_steps = int(args.limit_steps or train_cfg.get("max_steps", 1000))
     log_every = int(train_cfg.get("log_every", 50))
