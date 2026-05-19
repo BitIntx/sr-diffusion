@@ -150,7 +150,7 @@ best decoded PSNR proxy: step 47000, eval/decoded_psnr 23.89
 Current Stage 3 config:
 
 ```text
-configs/diffusion_photo10k.yaml
+configs/diffusion_photo10k_b32.yaml
 ```
 
 Current Stage 3 model:
@@ -159,6 +159,8 @@ Current Stage 3 model:
 conditional U-Net params: 76.6M
 frozen Stage 2 condition encoder params: 2.4M
 latent shape: 16 x 128 x 128
+batch size: 32
+max steps: 25000
 ```
 
 At `batch_size=16`, one epoch is:
@@ -314,20 +316,20 @@ Run the current Stage 3 conditional diffusion config:
 
 ```bash
 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
-  --config configs/diffusion_photo10k.yaml
+  --config configs/diffusion_photo10k_b32.yaml
 ```
 
 Recommended Stage 3 tmux launch:
 
 ```bash
 tmux new-session -d -s sr_stage3 \
-  'cd /home/jwheojjang/sr-diffusion && env PYTHONUNBUFFERED=1 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py --config configs/diffusion_photo10k.yaml > /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b8/train_tmux.log 2>&1'
+  'cd /home/jwheojjang/sr-diffusion && env PYTHONUNBUFFERED=1 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py --config configs/diffusion_photo10k_b32.yaml > /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/train_tmux.log 2>&1'
 ```
 
 Watch the Stage 3 log:
 
 ```bash
-tail -f /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b8/train_tmux.log
+tail -f /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/train_tmux.log
 ```
 
 Watch GPU usage:
