@@ -6,7 +6,7 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download
 
 
-DEFAULT_FILES = [
+PROTOTYPE_FILES = [
     "checkpoints/stage1_autoencoder_best_eval_recon.pt",
     "checkpoints/stage2_latent_pretrain_best_eval_latent.pt",
     "checkpoints/stage3_diffusion_b32_best_eval_noise.pt",
@@ -14,6 +14,21 @@ DEFAULT_FILES = [
     "CHECKPOINT_LICENSE.md",
     "LICENSE",
 ]
+
+PHOTO100K_FILES = [
+    *PROTOTYPE_FILES,
+    "checkpoints/stage2_photo100k_b64_best_eval_latent.pt",
+    "checkpoints/stage3_photo100k_b32_best_eval_noise.pt",
+    "configs/latent_pretrain_photo100k.yaml",
+    "configs/diffusion_photo100k_b32.yaml",
+    "metrics/stage2_photo100k_b64_summary.json",
+    "metrics/stage3_photo100k_b32_summary.json",
+]
+
+PRESETS = {
+    "prototype": PROTOTYPE_FILES,
+    "photo100k": PHOTO100K_FILES,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,17 +38,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--revision", default=None)
     parser.add_argument("--output-dir", type=Path, default=Path("."))
     parser.add_argument(
+        "--preset",
+        choices=sorted(PRESETS),
+        default="prototype",
+        help="Artifact set to download. 'photo100k' includes larger training handoff checkpoints.",
+    )
+    parser.add_argument(
         "--file",
         action="append",
         default=None,
-        help="Specific repo file to download. Can be repeated. Defaults to the prototype inference set.",
+        help="Specific repo file to download. Can be repeated and overrides --preset.",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    files = args.file or DEFAULT_FILES
+    files = args.file or PRESETS[args.preset]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for filename in files:
         destination = args.output_dir / filename

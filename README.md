@@ -62,6 +62,22 @@ A conservative Stage 4-lite low-timestep fine-tune improved one-step diagnostics
 but did not improve the fixed 32-step sampled validation result, so it is
 recorded as an experiment rather than promoted as the best model.
 
+The photo100k scale-up has also completed through Stage 3:
+
+```text
+Stage 2 photo100k: latent_pretrain_photo100k_b64, finished step 30000
+Stage 3 photo100k: diffusion_photo100k_b32, finished step 60000
+```
+
+The next recommended work is sampled eval for the Stage 3 photo100k checkpoint,
+then a photo100k Stage 4 condition-start fine-tune and degradation-v2 work for
+denoise/sharpening.
+
+For VM migration and continuation context, read:
+
+- [docs/HANDOFF_KO.md](docs/HANDOFF_KO.md)
+- [docs/VM_RECOVERY_KO.md](docs/VM_RECOVERY_KO.md)
+
 Implemented:
 
 - Project scaffold and config loading.
