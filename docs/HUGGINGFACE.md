@@ -111,6 +111,20 @@ degradation config:
   --artifact /home/jwheojjang/scratch/sr-diffusion/runs/compare_photo100k_stage3_vs_stage4_condition_val100/summary.json=metrics/stage4_photo100k_condition_compare_stage3_summary.json
 ```
 
+Upload the photo100k Stage 2 `photo_v2` condition encoder and follow-up v2
+diffusion configs:
+
+```bash
+/home/jwheojjang/venvs/cuda/bin/python scripts/upload_hf_artifact.py \
+  --repo-id jwheo/sr-diffusion \
+  --repo-type model \
+  --message "Upload photo100k Stage 2 v2 condition encoder" \
+  --artifact configs/diffusion_photo100k_b32_v2.yaml=configs/diffusion_photo100k_b32_v2.yaml \
+  --artifact configs/diffusion_photo100k_b32_stage4_condition_v2.yaml=configs/diffusion_photo100k_b32_stage4_condition_v2.yaml \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints/best_eval_latent.pt=checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/summary.json=metrics/stage2_photo100k_v2_b64_summary.json
+```
+
 Make the Hub repository public after license files and the model card are in
 place:
 

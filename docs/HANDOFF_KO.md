@@ -229,40 +229,109 @@ checkpoints/stage3_photo100k_b32_best_eval_noise.pt
 metrics/stage3_photo100k_b32_summary.json
 ```
 
+Stage3 sampled eval:
+
+```text
+output:
+  /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_photo100k_val100_t50_32step
+val100, 32 DDIM steps:
+  SR PSNR:      25.3745
+  bicubic PSNR: 24.4778
+  delta:        +0.8967
+```
+
+### Stage 4: photo100k condition-start
+
+```text
+config: configs/diffusion_photo100k_b32_stage4_condition.yaml
+run: diffusion_photo100k_b32_stage4_condition
+selected checkpoint:
+  /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt
+initialized from:
+  /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints/best_eval_noise.pt
+finished step: 5000
+best decoded checkpoint: step 1500
+sampled val100 t25 32-step:
+  SR PSNR:      25.4072
+  bicubic PSNR: 24.4778
+  delta:        +0.9294
+  vs Stage3:    +0.0327, wins 68 / losses 32
+```
+
+HF:
+
+```text
+checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt
+metrics/stage4_photo100k_condition_val100_t25_32step_summary.json
+metrics/stage4_photo100k_condition_compare_stage3_summary.json
+```
+
+### Stage 2: photo100k degradation v2 fine-tune
+
+```text
+config: configs/latent_pretrain_photo100k_v2.yaml
+run: latent_pretrain_photo100k_v2_b64
+degradation preset: photo_v2
+selected checkpoint:
+  /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints/best_eval_latent.pt
+initialized from:
+  /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b64/checkpoints/best_eval_latent.pt
+finished step: 20000
+best eval/latent_loss: step 19000, 0.28528
+best decoded PSNR proxy: step 15000, 21.91
+final eval: step 20000, eval/latent_loss 0.28704, decoded_psnr 21.60
+```
+
+`photo_v2`는 `mild`보다 훨씬 강한 LR degradation이므로 Stage2 mild의
+decoded PSNR 23.9대와 직접 비교하면 안 된다. 이 checkpoint는 v2 LR 입력을
+diffusion condition latent로 안정적으로 넘기기 위한 기준 checkpoint다.
+
+HF:
+
+```text
+checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt
+metrics/stage2_photo100k_v2_b64_summary.json
+```
+
 ## 현재 관찰 / 판단
 
 - 기본 x4 복원력은 잡혔다.
-- 디노이즈와 선명화 능력은 아직 약하다.
-- 원인은 현재 degradation이 `mild`이고 Stage3가 noise prediction baseline에
-  가깝기 때문.
-- 다음 개선축은 데이터/모델 크기보다 degradation v2와 Stage4 loss 설계다.
+- Stage4 condition-start는 Stage3 sampled eval 대비 소폭 개선됐다.
+- 디노이즈와 선명화 능력은 아직 `mild` degradation 기준으로 제한적이다.
+- `photo_v2` degradation과 Stage2 v2 condition encoder는 구현 및 20k
+  fine-tune까지 완료됐다.
+- 다음 개선축은 v2 condition encoder를 사용한 Stage3/Stage4 diffusion
+  fine-tune과 sampled/A-B eval이다.
 
 ## 다음 작업
 
 우선순위:
 
-1. Stage3 photo100k checkpoint의 sampled eval 실행.
-2. photo100k 기반 Stage4 condition-start fine-tune.
-3. degradation v2 설계:
-   - stronger blur
-   - Gaussian/sensor noise 강화
-   - JPEG/WebP artifact 강화
-   - ringing
-   - oversharpen artifact
-   - color shift / banding
-4. perceptual/fidelity fine-tune:
+1. Stage3 photo100k `photo_v2` fine-tune:
+   - config: `configs/diffusion_photo100k_b32_v2.yaml`
+   - init: Stage3 photo100k `best_eval_noise.pt`
+   - condition encoder: Stage2 v2 `best_eval_latent.pt`
+2. Stage3 v2 sampled eval.
+3. Stage4 photo100k `photo_v2` condition-start fine-tune:
+   - config: `configs/diffusion_photo100k_b32_stage4_condition_v2.yaml`
+   - init: Stage3 v2 best checkpoint
+4. Stage4 v2 sampled eval and A/B image review.
+5. perceptual/fidelity fine-tune:
    - `x0_weight`를 켠 condition-start training
    - LPIPS/VGG perceptual loss 검토
    - GAN은 나중에, A/B eval 기반으로 조심스럽게
-5. few-step distillation.
-6. A/B Elo preference eval.
+6. few-step distillation.
+7. A/B Elo preference eval.
 
 ## 새 VM에서 Codex에게 줄 짧은 프롬프트
 
 ```text
 이 repo는 /home/.../sr-diffusion 의 x4 latent diffusion SR 프로젝트다.
 docs/HANDOFF_KO.md 와 docs/VM_RECOVERY_KO.md 를 먼저 읽고 이어서 작업해줘.
-현재 Stage3 photo100k까지 완료됐고, 다음은 sampled eval 후 photo100k Stage4
-condition-start fine-tune 및 degradation v2/denoise-sharpening 개선이다.
+현재 Stage4 photo100k condition-start와 Stage2 photo100k degradation v2
+condition encoder fine-tune까지 완료됐다. 다음은
+configs/diffusion_photo100k_b32_v2.yaml 로 Stage3 v2 fine-tune 후
+configs/diffusion_photo100k_b32_stage4_condition_v2.yaml 로 Stage4 v2
+condition-start fine-tune 및 sampled/A-B eval이다.
 상업적 이용은 금지이고, raw dataset은 GitHub/HF에 올리지 않는다.
 ```
