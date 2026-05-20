@@ -19,10 +19,15 @@ PHOTO100K_FILES = [
     *PROTOTYPE_FILES,
     "checkpoints/stage2_photo100k_b64_best_eval_latent.pt",
     "checkpoints/stage3_photo100k_b32_best_eval_noise.pt",
+    "checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt",
     "configs/latent_pretrain_photo100k.yaml",
+    "configs/latent_pretrain_photo100k_v2.yaml",
     "configs/diffusion_photo100k_b32.yaml",
+    "configs/diffusion_photo100k_b32_stage4_condition.yaml",
     "metrics/stage2_photo100k_b64_summary.json",
     "metrics/stage3_photo100k_b32_summary.json",
+    "metrics/stage4_photo100k_condition_val100_t25_32step_summary.json",
+    "metrics/stage4_photo100k_condition_compare_stage3_summary.json",
 ]
 
 PRESETS = {

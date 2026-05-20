@@ -326,6 +326,14 @@ noise:
 - JPEG/WebP compression.
 - blur, color jitter, sharpening, and mild banding.
 
+The `photo_v2` degradation preset is available for denoise/sharpening work. It
+adds stronger blur, LR blur, signal-dependent sensor noise, heavier
+Gaussian/Poisson noise, stronger JPEG/WebP artifacts, edge ringing,
+oversharpen halos, color shift, and stronger banding. Because it changes the LR
+distribution seen by the condition encoder, the recommended path is to
+fine-tune Stage 2 on `photo_v2` before running Stage 3/4 experiments that use
+the same preset.
+
 For VAE training, LR is only used for visual logging. The VAE loss is:
 
 ```text

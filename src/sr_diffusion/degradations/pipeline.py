@@ -90,6 +90,15 @@ class DegradationPipeline:
         )
         lr = hr.resize((target_size, target_size), resample=resample)
 
+        if float(cfg.get("lr_blur_prob", 0.0)) > 0.0 and _chance(rng, cfg.get("lr_blur_prob", 0.0)):
+            radius = _range_value(rng, cfg.get("lr_blur_radius"), 0.4)
+            lr = lr.filter(ImageFilter.GaussianBlur(radius=radius))
+
+        if float(cfg.get("sensor_noise_prob", 0.0)) > 0.0 and _chance(rng, cfg.get("sensor_noise_prob", 0.0)):
+            read_sigma = _range_value(rng, cfg.get("sensor_read_sigma"), 2.0)
+            shot_scale = _range_value(rng, cfg.get("sensor_shot_scale"), 8.0)
+            lr = self._sensor_noise(lr, read_sigma=read_sigma, shot_scale=shot_scale, rng=rng)
+
         if _chance(rng, cfg.get("gaussian_noise_prob", 0.0)):
             sigma = _range_value(rng, cfg.get("gaussian_sigma"), 2.0)
             lr = self._gaussian_noise(lr, sigma=sigma, rng=rng)
@@ -105,11 +114,21 @@ class DegradationPipeline:
             quality = _range_int(rng, cfg.get("webp_quality"), 90)
             lr = self._compress(lr, fmt="WEBP", quality=quality)
 
+        if float(cfg.get("ringing_prob", 0.0)) > 0.0 and _chance(rng, cfg.get("ringing_prob", 0.0)):
+            radius = _range_int(rng, cfg.get("ringing_radius"), 2)
+            strength = _range_value(rng, cfg.get("ringing_strength"), 0.08)
+            lr = self._ringing(lr, radius=radius, strength=strength)
+
         if _chance(rng, cfg.get("color_prob", 0.0)):
             jitter = cfg.get("color_jitter", [0.95, 1.05])
             lr = ImageEnhance.Color(lr).enhance(_range_value(rng, jitter, 1.0))
             lr = ImageEnhance.Contrast(lr).enhance(_range_value(rng, jitter, 1.0))
             lr = ImageEnhance.Brightness(lr).enhance(_range_value(rng, jitter, 1.0))
+
+        if float(cfg.get("color_shift_prob", 0.0)) > 0.0 and _chance(rng, cfg.get("color_shift_prob", 0.0)):
+            gain = cfg.get("color_shift_gain", [0.96, 1.04])
+            bias = cfg.get("color_shift_bias", [-4.0, 4.0])
+            lr = self._color_shift(lr, gain=gain, bias=bias, rng=rng)
 
         if _chance(rng, cfg.get("anime_line_prob", 0.0)):
             lr = self._anime_line_change(lr, rng=rng)
@@ -122,6 +141,12 @@ class DegradationPipeline:
             factor = _range_value(rng, cfg.get("sharpen_factor"), 1.2)
             lr = ImageEnhance.Sharpness(lr).enhance(factor)
 
+        if float(cfg.get("oversharpen_prob", 0.0)) > 0.0 and _chance(rng, cfg.get("oversharpen_prob", 0.0)):
+            radius = _range_value(rng, cfg.get("oversharpen_radius"), 1.0)
+            percent = _range_int(rng, cfg.get("oversharpen_percent"), 180)
+            threshold = _range_int(rng, cfg.get("oversharpen_threshold"), 2)
+            lr = lr.filter(ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold))
+
         return lr.convert("RGB")
 
     @staticmethod
@@ -130,6 +155,15 @@ class DegradationPipeline:
         np_rng = np.random.default_rng(rng.randrange(2**32))
         array = array + np_rng.normal(0.0, sigma, size=array.shape)
         return Image.fromarray(_to_uint8(array), mode="RGB")
+
+    @staticmethod
+    def _sensor_noise(image: Image.Image, read_sigma: float, shot_scale: float, rng: random.Random) -> Image.Image:
+        array = np.asarray(image).astype(np.float32) / 255.0
+        np_rng = np.random.default_rng(rng.randrange(2**32))
+        read = np_rng.normal(0.0, read_sigma / 255.0, size=array.shape)
+        shot_sigma = np.sqrt(np.clip(array, 0.0, 1.0)) * (shot_scale / 255.0)
+        shot = np_rng.normal(0.0, shot_sigma, size=array.shape)
+        return Image.fromarray(_to_uint8((array + read + shot) * 255.0), mode="RGB")
 
     @staticmethod
     def _poisson_noise(image: Image.Image, rng: random.Random) -> Image.Image:
@@ -148,6 +182,44 @@ class DegradationPipeline:
             return Image.open(buffer).convert("RGB")
         except OSError:
             return image
+
+    @staticmethod
+    def _ringing(image: Image.Image, radius: int, strength: float) -> Image.Image:
+        radius = max(1, int(radius))
+        gray = np.asarray(image.convert("L")).astype(np.float32)
+        blurred = np.asarray(image.convert("L").filter(ImageFilter.GaussianBlur(radius=max(0.6, radius * 0.5))))
+        edge = gray - blurred
+        halo = np.zeros_like(edge)
+
+        def shifted(array: np.ndarray, dx: int, dy: int) -> np.ndarray:
+            height, width = array.shape
+            pad_x = abs(dx)
+            pad_y = abs(dy)
+            padded = np.pad(array, ((pad_y, pad_y), (pad_x, pad_x)), mode="edge")
+            x0 = pad_x - dx
+            y0 = pad_y - dy
+            return padded[y0 : y0 + height, x0 : x0 + width]
+
+        for offset in range(1, radius + 1):
+            sign = -1.0 if offset % 2 else 0.65
+            weight = sign / float(offset)
+            halo += weight * (
+                shifted(edge, offset, 0)
+                + shifted(edge, -offset, 0)
+                + shifted(edge, 0, offset)
+                + shifted(edge, 0, -offset)
+            )
+        halo *= 0.25 * float(strength)
+        array = np.asarray(image).astype(np.float32) + halo[..., None]
+        return Image.fromarray(_to_uint8(array), mode="RGB")
+
+    @staticmethod
+    def _color_shift(image: Image.Image, gain: Any, bias: Any, rng: random.Random) -> Image.Image:
+        array = np.asarray(image).astype(np.float32)
+        gains = np.array([_range_value(rng, gain, 1.0) for _ in range(3)], dtype=np.float32)
+        biases = np.array([_range_value(rng, bias, 0.0) for _ in range(3)], dtype=np.float32)
+        array = array * gains.reshape(1, 1, 3) + biases.reshape(1, 1, 3)
+        return Image.fromarray(_to_uint8(array), mode="RGB")
 
     @staticmethod
     def _anime_line_change(image: Image.Image, rng: random.Random) -> Image.Image:

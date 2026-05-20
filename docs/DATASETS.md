@@ -107,6 +107,23 @@ For a stricter high-resolution-only COCO subset, use `--coco-min-size 480`.
 That currently yields about 49k total photo training images after DF2K is
 merged.
 
+## Degradation v2
+
+The `photo_v2` preset targets the current denoise/sharpening weakness more
+directly than `mild`. It includes stronger pre-downsample blur, optional LR
+blur, signal-dependent sensor noise, heavier Gaussian/Poisson noise, lower
+quality JPEG/WebP compression, edge ringing, oversharpen halos, color shift,
+and stronger banding.
+
+Use it consistently across the condition encoder and diffusion stages. A good
+next sequence is:
+
+```text
+Stage 2 photo100k fine-tune with degradation_preset: photo_v2
+Stage 3/4 photo100k fine-tune with the v2 condition encoder
+sampled eval and A/B image review against the mild baseline
+```
+
 ## Scaling Photo Data
 
 Good next candidates:
