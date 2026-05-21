@@ -42,6 +42,17 @@ Stage 3 diffusion U-Net:      76.610M
 Full inference path:         100.094M
 ```
 
+500M급 확장 config:
+
+```text
+XL Stage 1 VAE:                  21.096M
+XL Stage 2 LR-to-latent encoder: 18.944M
+XL Stage 4 diffusion U-Net:     469.618M
+XL full inference path:         509.658M
+Stage 2 XL config: configs/latent_pretrain_photo100k_v3_noise_xl.yaml
+Stage 4 XL config: configs/diffusion_photo100k_xl_stage4_condition_v3.yaml
+```
+
 ## 라이선스 / 공개 상태
 
 - GitHub: <https://github.com/BitIntx/sr-diffusion>
@@ -381,20 +392,26 @@ metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
 - Stage3/Stage4 v2 fine-tune과 sampled eval까지 완료됐다.
 - Stage4 v2는 Stage3 v2보다 낫지만, 사용자가 체감할 artifact 억제가 아직
   남아 있다.
-- 다음 개선축은 강한 noise/color-noise curriculum을 가진 Stage2 v3 long
-  fine-tune과 이후 Stage3/Stage4 v3 eval이다.
+- 강한 noise/color-noise curriculum을 가진 Stage2 v3 small run은 step
+  12700에서 중단했다. eval이 9k~12k에서 `eval/latent_loss` 약 0.282로
+  횡보해, 더 태우는 것보다 500M급 확장으로 넘어가는 판단을 했다.
+- 다음 개선축은 Stage2 XL condition encoder와 Stage4 XL condition-start
+  diffusion U-Net이다.
 
 ## 다음 작업
 
 우선순위:
 
-1. Stage2 photo100k `photo_v3_noise_mix` long fine-tune:
-   - config: `configs/latent_pretrain_photo100k_v3_noise.yaml`
-   - init: Stage2 v2 `best_eval_latent.pt`
-   - max_steps: 50000
-2. Stage3/Stage4 v3 fine-tune:
-   - condition encoder: Stage2 v3 best checkpoint
-   - init diffusion: Stage3/Stage4 v2 best checkpoint 선택 후 sampled eval 비교
+1. Stage2 photo100k XL `photo_v3_noise_mix` condition encoder:
+   - config: `configs/latent_pretrain_photo100k_v3_noise_xl.yaml`
+   - params: 18.944M
+   - max_steps: 80000
+2. Stage4 photo100k XL condition-start:
+   - config: `configs/diffusion_photo100k_xl_stage4_condition_v3.yaml`
+   - params: U-Net 469.618M, full path 509.658M
+   - init diffusion: Stage4 v2 `best_eval_condition_decoded.pt`
+   - use `--partial-init` because architecture is deeper/wider
+   - condition encoder: Stage2 XL best checkpoint
 3. A/B review sheet 정리:
    - mild Stage4 vs Stage3 v2 vs Stage4 v2
    - denoise, sharpening, artifact, naturalness 기준

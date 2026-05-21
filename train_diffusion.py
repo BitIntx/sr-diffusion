@@ -20,7 +20,16 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from sr_diffusion.datasets import ManifestImageDataset
 from sr_diffusion.models import AutoencoderKL, ConditionalUNet, LRToLatentPredictor, NoiseScheduler
-from sr_diffusion.utils import autocast_context, get_device, load_config, save_config, seed_everything, seed_worker
+from sr_diffusion.utils import (
+    autocast_context,
+    format_partial_load_report,
+    get_device,
+    load_config,
+    load_matching_weights,
+    save_config,
+    seed_everything,
+    seed_worker,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,9 +39,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", type=Path, default=None)
     parser.add_argument("--init-checkpoint", type=Path, default=None)
     parser.add_argument(
+        "--partial-init",
+        action="store_true",
+        help="Load only shape-compatible diffusion U-Net tensors from --init-checkpoint.",
+    )
+    parser.add_argument(
         "--init-condition-encoder",
         action="store_true",
         help="Also load condition_encoder weights from --init-checkpoint. By default init uses the config checkpoint.",
+    )
+    parser.add_argument(
+        "--partial-init-condition-encoder",
+        action="store_true",
+        help="When --init-condition-encoder is set, load only shape-compatible condition encoder tensors.",
     )
     return parser.parse_args()
 
@@ -209,11 +228,21 @@ def load_model_weights(
     condition_encoder: LRToLatentPredictor,
     device: torch.device,
     load_condition_encoder: bool = False,
+    partial: bool = False,
+    partial_condition_encoder: bool = False,
 ) -> int:
     checkpoint = torch.load(path, map_location=device)
-    model.load_state_dict(checkpoint["model"])
+    if partial:
+        stats = load_matching_weights(model, checkpoint["model"])
+        print(format_partial_load_report("model", stats))
+    else:
+        model.load_state_dict(checkpoint["model"])
     if load_condition_encoder and "condition_encoder" in checkpoint:
-        condition_encoder.load_state_dict(checkpoint["condition_encoder"])
+        if partial_condition_encoder:
+            stats = load_matching_weights(condition_encoder, checkpoint["condition_encoder"])
+            print(format_partial_load_report("condition_encoder", stats))
+        else:
+            condition_encoder.load_state_dict(checkpoint["condition_encoder"])
     return int(checkpoint.get("step", 0))
 
 
@@ -431,10 +460,14 @@ def main() -> None:
             condition_encoder,
             device,
             load_condition_encoder=bool(args.init_condition_encoder),
+            partial=bool(args.partial_init),
+            partial_condition_encoder=bool(args.partial_init_condition_encoder),
         )
         print(
             f"initialized_from={args.init_checkpoint} source_step={init_step} "
-            f"loaded_init_condition_encoder={bool(args.init_condition_encoder)}"
+            f"partial_init={bool(args.partial_init)} "
+            f"loaded_init_condition_encoder={bool(args.init_condition_encoder)} "
+            f"partial_init_condition_encoder={bool(args.partial_init_condition_encoder)}"
         )
 
     max_steps = int(args.limit_steps or train_cfg.get("max_steps", 1000))

@@ -81,8 +81,15 @@ Stage 4 v2 vs Stage 3 v2: +0.1727 PSNR, wins 81 / losses 19
 
 Stage 4 v2 improves the Stage 3 v2 sampled result and usually stabilizes the
 denoise/sharpening output, but some color/contrast overshoot and small
-cyan/green sampling artifacts remain. The next recommended work is targeted
-artifact mitigation and A/B image review.
+cyan/green sampling artifacts remain. A stronger `photo_v3_noise_mix` Stage 2
+run was stopped at step 12700 after eval plateaued around `eval/latent_loss`
+0.282. The current scale-up path is a 500M-class configuration:
+
+```text
+XL Stage 2 condition encoder: configs/latent_pretrain_photo100k_v3_noise_xl.yaml
+XL Stage 4 condition-start:   configs/diffusion_photo100k_xl_stage4_condition_v3.yaml
+XL full inference params:     509.658M
+```
 
 For VM migration and continuation context, read:
 
@@ -116,6 +123,10 @@ Implemented:
 - Stage 4-lite low-timestep and condition-start fine-tuning.
 - `photo_v2` degradation for stronger blur/noise/compression/ringing/color
   shift/banding experiments.
+- `photo_v3_noise_mix` degradation and XL configs for 500M-class
+  denoise/sharpening experiments.
+- Partial checkpoint initialization for widened/deepened Stage 2 and diffusion
+  models via `--partial-init`.
 
 Stage 1 training config:
 
@@ -583,6 +594,13 @@ Run the photo100k Stage 2 scale-up from the selected 10k checkpoint:
   --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo10k_b16/checkpoints/best_eval_latent.pt
 ```
 
+Run the XL photo100k Stage 2 condition encoder for the 500M-class path:
+
+```bash
+/home/jwheojjang/venvs/cuda/bin/python train_latent_pretrain.py \
+  --config configs/latent_pretrain_photo100k_v3_noise_xl.yaml
+```
+
 Recommended Stage 2 tmux launch:
 
 ```bash
@@ -609,6 +627,17 @@ After Stage 2 photo100k finishes, run the photo100k Stage 3 config:
 /home/jwheojjang/venvs/rocm/bin/python train_diffusion.py \
   --config configs/diffusion_photo100k_b32.yaml \
   --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
+```
+
+After the XL Stage 2 condition encoder finishes, run the 500M-class
+condition-start U-Net. It can reuse shape-compatible tensors from the smaller
+Stage 4 v2 checkpoint:
+
+```bash
+/home/jwheojjang/venvs/cuda/bin/python train_diffusion.py \
+  --config configs/diffusion_photo100k_xl_stage4_condition_v3.yaml \
+  --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt \
+  --partial-init
 ```
 
 Recommended Stage 3 tmux launch:

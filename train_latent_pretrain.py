@@ -20,7 +20,16 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from sr_diffusion.datasets import ManifestImageDataset
 from sr_diffusion.models import AutoencoderKL, LRToLatentPredictor
-from sr_diffusion.utils import autocast_context, get_device, load_config, save_config, seed_everything, seed_worker
+from sr_diffusion.utils import (
+    autocast_context,
+    format_partial_load_report,
+    get_device,
+    load_config,
+    load_matching_weights,
+    save_config,
+    seed_everything,
+    seed_worker,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,6 +38,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-steps", type=int, default=None)
     parser.add_argument("--resume", type=Path, default=None)
     parser.add_argument("--init-checkpoint", type=Path, default=None)
+    parser.add_argument(
+        "--partial-init",
+        action="store_true",
+        help="Load only shape-compatible tensors from --init-checkpoint. Useful when widening or deepening the model.",
+    )
     return parser.parse_args()
 
 
@@ -187,9 +201,13 @@ def load_checkpoint(
     return int(checkpoint.get("step", 0))
 
 
-def load_model_weights(path: Path, model: torch.nn.Module, device: torch.device) -> int:
+def load_model_weights(path: Path, model: torch.nn.Module, device: torch.device, partial: bool = False) -> int:
     checkpoint = torch.load(path, map_location=device)
-    model.load_state_dict(checkpoint["model"])
+    if partial:
+        stats = load_matching_weights(model, checkpoint["model"])
+        print(format_partial_load_report("model", stats))
+    else:
+        model.load_state_dict(checkpoint["model"])
     return int(checkpoint.get("step", 0))
 
 
@@ -320,8 +338,8 @@ def main() -> None:
         start_step = load_checkpoint(args.resume, model, optimizer, device)
         print(f"resumed step={start_step}")
     elif args.init_checkpoint:
-        init_step = load_model_weights(args.init_checkpoint, model, device)
-        print(f"initialized_from={args.init_checkpoint} source_step={init_step}")
+        init_step = load_model_weights(args.init_checkpoint, model, device, partial=bool(args.partial_init))
+        print(f"initialized_from={args.init_checkpoint} source_step={init_step} partial_init={bool(args.partial_init)}")
 
     max_steps = int(args.limit_steps or train_cfg.get("max_steps", 1000))
     log_every = int(train_cfg.get("log_every", 50))
