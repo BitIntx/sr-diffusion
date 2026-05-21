@@ -24,6 +24,14 @@ def test_photo_v2_degradation_outputs_expected_size() -> None:
     assert lr.mode == "RGB"
 
 
+def test_photo_v3_noise_mix_outputs_expected_size() -> None:
+    image = Image.new("RGB", (128, 128), (200, 120, 80))
+    pipeline = DegradationPipeline.from_preset("photo_v3_noise_mix", scale=4)
+    lr = pipeline.apply(image, rng=random.Random(0), out_size=32)
+    assert lr.size == (32, 32)
+    assert lr.mode == "RGB"
+
+
 def test_forced_artifact_degradation_stays_rgb_uint8() -> None:
     gradient = np.tile(np.linspace(0, 255, 128, dtype=np.uint8), (128, 1))
     image = Image.fromarray(np.stack([gradient, np.flipud(gradient), gradient.T], axis=-1), mode="RGB")
@@ -38,6 +46,9 @@ def test_forced_artifact_degradation_stays_rgb_uint8() -> None:
             "sensor_shot_scale": 8.0,
             "gaussian_noise_prob": 1.0,
             "gaussian_sigma": 3.0,
+            "chroma_noise_prob": 1.0,
+            "chroma_noise_sigma": 8.0,
+            "chroma_noise_blur_radius": 0.5,
             "poisson_noise_prob": 1.0,
             "jpeg_prob": 1.0,
             "jpeg_quality": 50,

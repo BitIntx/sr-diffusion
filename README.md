@@ -347,6 +347,13 @@ distribution seen by the condition encoder, the recommended path is to
 fine-tune Stage 2 on `photo_v2` before running Stage 3/4 experiments that use
 the same preset.
 
+The `photo_v3_noise_mix` preset is a stronger denoise-focused curriculum. It
+mixes `photo_v2`, `photo_v3_noise`, and `mild` degradations so the condition
+encoder sees heavy Gaussian/sensor/chroma noise without losing cleaner inputs
+entirely. `photo_v3_noise` adds explicit chroma/color noise and stronger
+compression/noise ranges while keeping oversharpen/ringing probabilities
+moderate to avoid reinforcing the cyan/green dot artifacts observed in v2.
+
 For VAE training, LR is only used for visual logging. The VAE loss is:
 
 ```text

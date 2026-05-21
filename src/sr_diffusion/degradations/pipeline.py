@@ -61,6 +61,13 @@ class DegradationPipeline:
     def __init__(self, config: dict[str, Any], scale: int = 4):
         self.config = config
         self.scale = scale
+        self._mix_pipelines: list[tuple[float, DegradationPipeline]] = []
+        for item in config.get("preset_mix", []):
+            weight = float(item.get("weight", 1.0))
+            if weight <= 0.0:
+                continue
+            self._mix_pipelines.append((weight, DegradationPipeline.from_preset(str(item["preset"]), scale=scale)))
+        self._mix_total = sum(weight for weight, _ in self._mix_pipelines)
 
     @classmethod
     def from_preset(cls, name: str, scale: int = 4) -> "DegradationPipeline":
@@ -73,6 +80,15 @@ class DegradationPipeline:
         out_size: int | None = None,
     ) -> Image.Image:
         rng = rng or random.Random()
+        if self._mix_pipelines:
+            threshold = rng.random() * self._mix_total
+            cumulative = 0.0
+            for weight, pipeline in self._mix_pipelines:
+                cumulative += weight
+                if threshold <= cumulative:
+                    return pipeline.apply(image, rng=rng, out_size=out_size)
+            return self._mix_pipelines[-1][1].apply(image, rng=rng, out_size=out_size)
+
         cfg = self.config
         hr = image.convert("RGB")
 
@@ -102,6 +118,11 @@ class DegradationPipeline:
         if _chance(rng, cfg.get("gaussian_noise_prob", 0.0)):
             sigma = _range_value(rng, cfg.get("gaussian_sigma"), 2.0)
             lr = self._gaussian_noise(lr, sigma=sigma, rng=rng)
+
+        if float(cfg.get("chroma_noise_prob", 0.0)) > 0.0 and _chance(rng, cfg.get("chroma_noise_prob", 0.0)):
+            sigma = _range_value(rng, cfg.get("chroma_noise_sigma"), 6.0)
+            blur_radius = _range_value(rng, cfg.get("chroma_noise_blur_radius"), 0.0)
+            lr = self._chroma_noise(lr, sigma=sigma, blur_radius=blur_radius, rng=rng)
 
         if _chance(rng, cfg.get("poisson_noise_prob", 0.0)):
             lr = self._poisson_noise(lr, rng=rng)
@@ -155,6 +176,21 @@ class DegradationPipeline:
         np_rng = np.random.default_rng(rng.randrange(2**32))
         array = array + np_rng.normal(0.0, sigma, size=array.shape)
         return Image.fromarray(_to_uint8(array), mode="RGB")
+
+    @staticmethod
+    def _chroma_noise(image: Image.Image, sigma: float, blur_radius: float, rng: random.Random) -> Image.Image:
+        array = np.asarray(image.convert("YCbCr")).astype(np.float32)
+        np_rng = np.random.default_rng(rng.randrange(2**32))
+        noise = np_rng.normal(0.0, sigma, size=array.shape[:2] + (2,)).astype(np.float32)
+        if blur_radius > 0.0:
+            channels = []
+            for channel in range(2):
+                noise_image = Image.fromarray(_to_uint8(noise[..., channel] + 128.0), mode="L")
+                noise_image = noise_image.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+                channels.append(np.asarray(noise_image).astype(np.float32) - 128.0)
+            noise = np.stack(channels, axis=-1)
+        array[..., 1:] += noise
+        return Image.fromarray(_to_uint8(array), mode="YCbCr").convert("RGB")
 
     @staticmethod
     def _sensor_noise(image: Image.Image, read_sigma: float, shot_scale: float, rng: random.Random) -> Image.Image:

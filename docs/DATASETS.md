@@ -124,6 +124,36 @@ Stage 3/4 photo100k fine-tune with the v2 condition encoder
 sampled eval and A/B image review against the mild baseline
 ```
 
+## Degradation v3 Noise Mix
+
+The `photo_v3_noise_mix` preset is for longer denoise/color-noise training
+without writing a separate LR dataset to disk. LR images are still generated
+on the fly, which keeps storage small and gives each epoch fresh degradation
+samples.
+
+The mix is:
+
+```text
+40% photo_v2
+40% photo_v3_noise
+20% mild
+```
+
+`photo_v3_noise` adds explicit chroma/color noise, stronger sensor read/shot
+noise, stronger Gaussian noise, heavier JPEG/WebP compression, and banding. It
+keeps ringing/oversharpen probabilities moderate because the v2 Stage 3/4
+results already showed cyan/green dot artifacts and contrast overshoot on some
+samples.
+
+The intended sequence is:
+
+```text
+Stage 2 photo100k long fine-tune with degradation_preset: photo_v3_noise_mix
+Stage 3 photo100k v3 fine-tune with the v3 condition encoder
+Stage 4 photo100k v3 condition-start fine-tune
+bucketed sampled eval for heavy noise, chroma noise, JPEG/WebP, blur+noise
+```
+
 ## Scaling Photo Data
 
 Good next candidates:

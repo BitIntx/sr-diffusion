@@ -381,24 +381,32 @@ metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
 - Stage3/Stage4 v2 fine-tune과 sampled eval까지 완료됐다.
 - Stage4 v2는 Stage3 v2보다 낫지만, 사용자가 체감할 artifact 억제가 아직
   남아 있다.
-- 다음 개선축은 v2 artifact 억제와 A/B review다.
+- 다음 개선축은 강한 noise/color-noise curriculum을 가진 Stage2 v3 long
+  fine-tune과 이후 Stage3/Stage4 v3 eval이다.
 
 ## 다음 작업
 
 우선순위:
 
-1. A/B review sheet 정리:
+1. Stage2 photo100k `photo_v3_noise_mix` long fine-tune:
+   - config: `configs/latent_pretrain_photo100k_v3_noise.yaml`
+   - init: Stage2 v2 `best_eval_latent.pt`
+   - max_steps: 50000
+2. Stage3/Stage4 v3 fine-tune:
+   - condition encoder: Stage2 v3 best checkpoint
+   - init diffusion: Stage3/Stage4 v2 best checkpoint 선택 후 sampled eval 비교
+3. A/B review sheet 정리:
    - mild Stage4 vs Stage3 v2 vs Stage4 v2
    - denoise, sharpening, artifact, naturalness 기준
-2. artifact 억제 실험:
+4. artifact 억제 실험:
    - cyan/green dot artifact를 줄이는 sampled eval 기준 마련
    - color/contrast overshoot penalty 또는 lower start timestep 검토
-3. perceptual/fidelity fine-tune:
+5. perceptual/fidelity fine-tune:
    - `x0_weight`를 켠 condition-start training
    - LPIPS/VGG perceptual loss 검토
    - GAN은 나중에, A/B eval 기반으로 조심스럽게
-4. few-step distillation.
-5. A/B Elo preference eval.
+6. few-step distillation.
+7. A/B Elo preference eval.
 
 ## 새 VM에서 Codex에게 줄 짧은 프롬프트
 
@@ -406,8 +414,8 @@ metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
 이 repo는 /home/.../sr-diffusion 의 x4 latent diffusion SR 프로젝트다.
 docs/HANDOFF_KO.md 와 docs/VM_RECOVERY_KO.md 를 먼저 읽고 이어서 작업해줘.
 현재 Stage4 photo100k condition-start와 Stage2/Stage3/Stage4 photo100k
-degradation v2 fine-tune 및 sampled eval까지 완료됐다. 다음은 Stage4 v2의
-cyan/green dot artifact, color/contrast overshoot를 줄이기 위한 artifact
-억제 실험과 A/B review다.
+degradation v2 fine-tune 및 sampled eval까지 완료됐다. 다음은
+photo_v3_noise_mix 기반 Stage2 long fine-tune 후 Stage3/Stage4 v3로
+denoise/color-noise 성능을 확인하는 것이다.
 상업적 이용은 금지이고, raw dataset은 GitHub/HF에 올리지 않는다.
 ```
