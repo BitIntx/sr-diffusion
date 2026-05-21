@@ -126,6 +126,7 @@ mkdir -p /home/$USER/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_onl
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b64/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints
+mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition/checkpoints
 
 cp checkpoints/stage1_autoencoder_best_eval_recon.pt \
@@ -140,6 +141,9 @@ cp checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt \
 cp checkpoints/stage3_photo100k_b32_best_eval_noise.pt \
   /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints/best_eval_noise.pt
 
+cp checkpoints/stage3_photo100k_v2_b32_best_eval_noise.pt \
+  /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints/best_eval_noise.pt
+
 cp checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt \
   /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt
 ```
@@ -149,22 +153,20 @@ cp checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt \
 
 ## 7. 이어서 할 작업
 
-현재 이어서 할 작업은 `photo_v2` condition encoder 기반 Stage3/Stage4
-fine-tune이다. Stage3 v2 시작:
+현재 이어서 할 작업은 `photo_v2` 기반 Stage4 condition-start fine-tune이다.
+Stage4 v2 시작:
 
 ```bash
 python train_diffusion.py \
-  --config configs/diffusion_photo100k_b32_v2.yaml \
-  --init-checkpoint /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints/best_eval_noise.pt
+  --config configs/diffusion_photo100k_b32_stage4_condition_v2.yaml \
+  --init-checkpoint /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints/best_eval_noise.pt
 ```
 
 그 다음:
 
 ```text
-photo_v2 Stage3 sampled eval
-photo_v2 Stage4 condition-start fine-tune
-denoise/sharpening A/B review
-sampled eval / A-B preference eval
+photo_v2 Stage4 sampled eval
+denoise/sharpening A/B review against Stage3 v2 and mild baseline
 ```
 
 ## 8. tmux / 모니터링

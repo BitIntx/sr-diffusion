@@ -54,24 +54,32 @@ Constraints:
 
 ## Current Status
 
-We finished the first **Stage 1: VAE / Autoencoder** pass, the first
-**Stage 2: deterministic LR -> HR latent pretraining** pass, and the first
-**Stage 3: conditional latent diffusion** pass. The current best sampled SR
-checkpoint is the Stage 4 condition-start checkpoint initialized from Stage 3.
-A conservative Stage 4-lite low-timestep fine-tune improved one-step diagnostics
-but did not improve the fixed 32-step sampled validation result, so it is
-recorded as an experiment rather than promoted as the best model.
-
-The photo100k scale-up has also completed through Stage 3:
+We finished the first **Stage 1: VAE / Autoencoder**, **Stage 2:
+deterministic LR -> HR latent pretraining**, and **Stage 3: conditional latent
+diffusion** passes. The photo100k scale-up has completed through Stage 4
+condition-start, and the current best sampled photo100k checkpoint is the
+Stage 4 condition-start checkpoint initialized from Stage 3:
 
 ```text
 Stage 2 photo100k: latent_pretrain_photo100k_b64, finished step 30000
 Stage 3 photo100k: diffusion_photo100k_b32, finished step 60000
+Stage 4 photo100k: diffusion_photo100k_b32_stage4_condition, finished step 5000
+sampled val100: Stage3 25.3745 PSNR, Stage4 25.4072 PSNR
 ```
 
-The next recommended work is sampled eval for the Stage 3 photo100k checkpoint,
-then a photo100k Stage 4 condition-start fine-tune and degradation-v2 work for
-denoise/sharpening.
+For denoise/sharpening work, `photo_v2` degradation is implemented and the
+Stage 2/3 photo100k v2 fine-tunes have completed:
+
+```text
+Stage 2 photo100k v2: latent_pretrain_photo100k_v2_b64, finished step 20000
+Stage 3 photo100k v2: diffusion_photo100k_b32_v2, finished step 20000
+Stage 3 v2 sampled val100: SR 22.6699 PSNR, bicubic 22.4103 PSNR, delta +0.2595
+```
+
+Stage 3 v2 shows useful denoise behavior on some strongly degraded inputs, but
+also leaves color/contrast overshoot and small sampling artifacts. The next
+recommended work is Stage 4 photo100k v2 condition-start fine-tuning followed
+by sampled eval and A/B image review.
 
 For VM migration and continuation context, read:
 
@@ -103,6 +111,8 @@ Implemented:
 - Stage 3 conditional U-Net, noise scheduler, and diffusion training loop.
 - Stage 3 DDIM/img2img inference and sampled validation eval.
 - Stage 4-lite low-timestep and condition-start fine-tuning.
+- `photo_v2` degradation for stronger blur/noise/compression/ringing/color
+  shift/banding experiments.
 
 Stage 1 training config:
 
@@ -402,8 +412,10 @@ Upload only selected checkpoints/configs/metrics, not raw datasets. See
 ## Quick Prototype Inference
 
 The public Hugging Face prototype can be downloaded and run from a fresh clone.
-It uses the current 10k Stage 4 condition-start checkpoint, not the in-progress
-photo100k training run.
+The default inference config still points at the smaller 10k Stage 4
+condition-start checkpoint for faster setup. The Colab notebook now also lets
+you select the larger photo100k Stage 4 checkpoint or the experimental
+photo100k `photo_v2` Stage 3 checkpoint for denoise/sharpening review.
 
 For a click-to-run demo, open the Colab notebook:
 
@@ -424,6 +436,12 @@ Download the selected public checkpoints from Hugging Face:
 
 ```bash
 python scripts/download_hf_checkpoints.py
+```
+
+Download the larger photo100k/v2 artifact set:
+
+```bash
+python scripts/download_hf_checkpoints.py --preset photo100k
 ```
 
 Run x4 SR from an LR image. The default HF config expects a 128x128 LR crop and
@@ -467,6 +485,24 @@ The output is `sr_00.png`. The default config is
 checkpoints/stage1_autoencoder_best_eval_recon.pt
 checkpoints/stage2_latent_pretrain_best_eval_latent.pt
 checkpoints/stage4_condition_b32_best_eval_condition_decoded.pt
+```
+
+For the current photo100k Stage 4 checkpoint:
+
+```bash
+python infer_diffusion.py \
+  --config configs/hf/diffusion_photo100k_stage4_condition.yaml \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/photo100k_stage4
+```
+
+For the experimental photo100k `photo_v2` Stage 3 checkpoint:
+
+```bash
+python infer_diffusion.py \
+  --config configs/hf/diffusion_photo100k_v2.yaml \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/photo100k_v2
 ```
 
 To compare the earlier Stage 3 baseline instead:

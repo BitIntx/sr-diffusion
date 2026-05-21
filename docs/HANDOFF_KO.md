@@ -293,6 +293,44 @@ checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt
 metrics/stage2_photo100k_v2_b64_summary.json
 ```
 
+### Stage 3: photo100k degradation v2 fine-tune
+
+```text
+config: configs/diffusion_photo100k_b32_v2.yaml
+run: diffusion_photo100k_b32_v2
+degradation preset: photo_v2
+condition encoder:
+  /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints/best_eval_latent.pt
+selected checkpoint:
+  /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints/best_eval_noise.pt
+initialized from:
+  /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints/best_eval_noise.pt
+finished step: 20000
+best eval/noise_mse: step 19000, 0.00821
+best decoded PSNR proxy: step 19000, 23.44
+sampled val100 t50 32-step:
+  SR PSNR:      22.6699
+  bicubic PSNR: 22.4103
+  delta:        +0.2595
+  wins/losses:  63 / 37
+```
+
+정성 확인:
+
+- 강한 noise/JPEG 계열에서는 bicubic보다 denoise가 되는 샘플이 있다.
+- 일부 샘플에서는 색/대비 과보정, 녹색 점 artifact, 과한 texture smoothing이
+  보인다.
+- 따라서 Stage3 v2는 최종 품질 checkpoint가 아니라 Stage4 v2
+  condition-start 안정화의 시작점으로 본다.
+
+HF:
+
+```text
+checkpoints/stage3_photo100k_v2_b32_best_eval_noise.pt
+metrics/stage3_photo100k_v2_b32_summary.json
+metrics/stage3_photo100k_v2_val100_t50_32step_summary.json
+```
+
 ## 현재 관찰 / 판단
 
 - 기본 x4 복원력은 잡혔다.
@@ -300,23 +338,19 @@ metrics/stage2_photo100k_v2_b64_summary.json
 - 디노이즈와 선명화 능력은 아직 `mild` degradation 기준으로 제한적이다.
 - `photo_v2` degradation과 Stage2 v2 condition encoder는 구현 및 20k
   fine-tune까지 완료됐다.
-- 다음 개선축은 v2 condition encoder를 사용한 Stage3/Stage4 diffusion
-  fine-tune과 sampled/A-B eval이다.
+- Stage3 v2 fine-tune은 완료됐고, sampled eval에서 bicubic 대비 평균은
+  이겼지만 artifact가 남아 있다.
+- 다음 개선축은 Stage4 v2 condition-start fine-tune과 sampled/A-B eval이다.
 
 ## 다음 작업
 
 우선순위:
 
-1. Stage3 photo100k `photo_v2` fine-tune:
-   - config: `configs/diffusion_photo100k_b32_v2.yaml`
-   - init: Stage3 photo100k `best_eval_noise.pt`
-   - condition encoder: Stage2 v2 `best_eval_latent.pt`
-2. Stage3 v2 sampled eval.
-3. Stage4 photo100k `photo_v2` condition-start fine-tune:
+1. Stage4 photo100k `photo_v2` condition-start fine-tune:
    - config: `configs/diffusion_photo100k_b32_stage4_condition_v2.yaml`
    - init: Stage3 v2 best checkpoint
-4. Stage4 v2 sampled eval and A/B image review.
-5. perceptual/fidelity fine-tune:
+2. Stage4 v2 sampled eval and A/B image review.
+3. perceptual/fidelity fine-tune:
    - `x0_weight`를 켠 condition-start training
    - LPIPS/VGG perceptual loss 검토
    - GAN은 나중에, A/B eval 기반으로 조심스럽게
