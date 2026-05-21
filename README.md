@@ -74,12 +74,15 @@ Stage 2/3 photo100k v2 fine-tunes have completed:
 Stage 2 photo100k v2: latent_pretrain_photo100k_v2_b64, finished step 20000
 Stage 3 photo100k v2: diffusion_photo100k_b32_v2, finished step 20000
 Stage 3 v2 sampled val100: SR 22.6699 PSNR, bicubic 22.4103 PSNR, delta +0.2595
+Stage 4 photo100k v2: diffusion_photo100k_b32_stage4_condition_v2, finished step 5000
+Stage 4 v2 sampled val100: SR 22.8426 PSNR, bicubic 22.4103 PSNR, delta +0.4323
+Stage 4 v2 vs Stage 3 v2: +0.1727 PSNR, wins 81 / losses 19
 ```
 
-Stage 3 v2 shows useful denoise behavior on some strongly degraded inputs, but
-also leaves color/contrast overshoot and small sampling artifacts. The next
-recommended work is Stage 4 photo100k v2 condition-start fine-tuning followed
-by sampled eval and A/B image review.
+Stage 4 v2 improves the Stage 3 v2 sampled result and usually stabilizes the
+denoise/sharpening output, but some color/contrast overshoot and small
+cyan/green sampling artifacts remain. The next recommended work is targeted
+artifact mitigation and A/B image review.
 
 For VM migration and continuation context, read:
 
@@ -496,13 +499,22 @@ python infer_diffusion.py \
   --output-dir outputs/photo100k_stage4
 ```
 
-For the experimental photo100k `photo_v2` Stage 3 checkpoint:
+For the current experimental photo100k `photo_v2` Stage 4 checkpoint:
+
+```bash
+python infer_diffusion.py \
+  --config configs/hf/diffusion_photo100k_stage4_condition_v2.yaml \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/photo100k_v2_stage4
+```
+
+For the earlier photo100k `photo_v2` Stage 3 checkpoint:
 
 ```bash
 python infer_diffusion.py \
   --config configs/hf/diffusion_photo100k_v2.yaml \
   --input-lr /path/to/lr_128.png \
-  --output-dir outputs/photo100k_v2
+  --output-dir outputs/photo100k_v2_stage3
 ```
 
 To compare the earlier Stage 3 baseline instead:

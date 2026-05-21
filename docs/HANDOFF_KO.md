@@ -331,6 +331,46 @@ metrics/stage3_photo100k_v2_b32_summary.json
 metrics/stage3_photo100k_v2_val100_t50_32step_summary.json
 ```
 
+### Stage 4: photo100k degradation v2 condition-start
+
+```text
+config: configs/diffusion_photo100k_b32_stage4_condition_v2.yaml
+run: diffusion_photo100k_b32_stage4_condition_v2
+degradation preset: photo_v2
+condition encoder:
+  /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints/best_eval_latent.pt
+selected checkpoint:
+  /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt
+initialized from:
+  /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints/best_eval_noise.pt
+finished step: 5000
+best decoded checkpoint: step 1000
+best decoded PSNR proxy: step 1000, 22.12
+sampled val100 t25 32-step:
+  SR PSNR:      22.8426
+  bicubic PSNR: 22.4103
+  delta:        +0.4323
+  wins/losses:  70 / 30 vs bicubic
+  vs Stage3 v2: +0.1727, wins 81 / losses 19
+```
+
+정성 확인:
+
+- Stage3 v2보다 평균/승률은 개선됐고, 일부 overshoot가 완화됐다.
+- 하지만 어두운 영역과 강한 artifact 샘플에서 cyan/green 점 artifact가
+  아직 보인다.
+- 다음 단계는 더 긴 v2 condition-start보다 artifact 억제 loss/샘플링 조정,
+  A/B review가 우선이다.
+
+HF:
+
+```text
+checkpoints/stage4_photo100k_condition_v2_b32_best_eval_condition_decoded.pt
+metrics/stage4_photo100k_condition_v2_b32_summary.json
+metrics/stage4_photo100k_condition_v2_val100_t25_32step_summary.json
+metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
+```
+
 ## 현재 관찰 / 판단
 
 - 기본 x4 복원력은 잡혔다.
@@ -338,34 +378,36 @@ metrics/stage3_photo100k_v2_val100_t50_32step_summary.json
 - 디노이즈와 선명화 능력은 아직 `mild` degradation 기준으로 제한적이다.
 - `photo_v2` degradation과 Stage2 v2 condition encoder는 구현 및 20k
   fine-tune까지 완료됐다.
-- Stage3 v2 fine-tune은 완료됐고, sampled eval에서 bicubic 대비 평균은
-  이겼지만 artifact가 남아 있다.
-- 다음 개선축은 Stage4 v2 condition-start fine-tune과 sampled/A-B eval이다.
+- Stage3/Stage4 v2 fine-tune과 sampled eval까지 완료됐다.
+- Stage4 v2는 Stage3 v2보다 낫지만, 사용자가 체감할 artifact 억제가 아직
+  남아 있다.
+- 다음 개선축은 v2 artifact 억제와 A/B review다.
 
 ## 다음 작업
 
 우선순위:
 
-1. Stage4 photo100k `photo_v2` condition-start fine-tune:
-   - config: `configs/diffusion_photo100k_b32_stage4_condition_v2.yaml`
-   - init: Stage3 v2 best checkpoint
-2. Stage4 v2 sampled eval and A/B image review.
+1. A/B review sheet 정리:
+   - mild Stage4 vs Stage3 v2 vs Stage4 v2
+   - denoise, sharpening, artifact, naturalness 기준
+2. artifact 억제 실험:
+   - cyan/green dot artifact를 줄이는 sampled eval 기준 마련
+   - color/contrast overshoot penalty 또는 lower start timestep 검토
 3. perceptual/fidelity fine-tune:
    - `x0_weight`를 켠 condition-start training
    - LPIPS/VGG perceptual loss 검토
    - GAN은 나중에, A/B eval 기반으로 조심스럽게
-6. few-step distillation.
-7. A/B Elo preference eval.
+4. few-step distillation.
+5. A/B Elo preference eval.
 
 ## 새 VM에서 Codex에게 줄 짧은 프롬프트
 
 ```text
 이 repo는 /home/.../sr-diffusion 의 x4 latent diffusion SR 프로젝트다.
 docs/HANDOFF_KO.md 와 docs/VM_RECOVERY_KO.md 를 먼저 읽고 이어서 작업해줘.
-현재 Stage4 photo100k condition-start와 Stage2 photo100k degradation v2
-condition encoder fine-tune까지 완료됐다. 다음은
-configs/diffusion_photo100k_b32_v2.yaml 로 Stage3 v2 fine-tune 후
-configs/diffusion_photo100k_b32_stage4_condition_v2.yaml 로 Stage4 v2
-condition-start fine-tune 및 sampled/A-B eval이다.
+현재 Stage4 photo100k condition-start와 Stage2/Stage3/Stage4 photo100k
+degradation v2 fine-tune 및 sampled eval까지 완료됐다. 다음은 Stage4 v2의
+cyan/green dot artifact, color/contrast overshoot를 줄이기 위한 artifact
+억제 실험과 A/B review다.
 상업적 이용은 금지이고, raw dataset은 GitHub/HF에 올리지 않는다.
 ```

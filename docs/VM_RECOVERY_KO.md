@@ -128,6 +128,7 @@ mkdir -p /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition/checkpoints
+mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints
 
 cp checkpoints/stage1_autoencoder_best_eval_recon.pt \
   /home/$USER/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/checkpoints/best_eval_recon.pt
@@ -146,6 +147,9 @@ cp checkpoints/stage3_photo100k_v2_b32_best_eval_noise.pt \
 
 cp checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt \
   /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition/checkpoints/best_eval_condition_decoded.pt
+
+cp checkpoints/stage4_photo100k_condition_v2_b32_best_eval_condition_decoded.pt \
+  /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt
 ```
 
 기존 config가 `/home/jwheojjang/...`를 하드코딩하고 있다면, 새 VM의 유저명에
@@ -153,20 +157,25 @@ cp checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt \
 
 ## 7. 이어서 할 작업
 
-현재 이어서 할 작업은 `photo_v2` 기반 Stage4 condition-start fine-tune이다.
-Stage4 v2 시작:
+현재 이어서 할 작업은 Stage4 v2 sampled 결과를 바탕으로 artifact 억제와
+A/B review를 진행하는 것이다. Stage4 v2 sampled eval 재현:
 
 ```bash
-python train_diffusion.py \
+python eval_diffusion_samples.py \
   --config configs/diffusion_photo100k_b32_stage4_condition_v2.yaml \
-  --init-checkpoint /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints/best_eval_noise.pt
+  --checkpoint /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt \
+  --output-dir /home/$USER/scratch/sr-diffusion/runs/eval_diffusion_photo100k_stage4_condition_v2_val100_t25_32step \
+  --split val \
+  --limit 100 \
+  --steps 32 \
+  --seed 1337
 ```
 
 그 다음:
 
 ```text
-photo_v2 Stage4 sampled eval
 denoise/sharpening A/B review against Stage3 v2 and mild baseline
+cyan/green dot artifact and color/contrast overshoot mitigation experiments
 ```
 
 ## 8. tmux / 모니터링

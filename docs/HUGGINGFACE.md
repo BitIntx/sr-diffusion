@@ -139,6 +139,20 @@ Upload the photo100k Stage 3 `photo_v2` diffusion checkpoint and sampled eval:
   --artifact /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_photo100k_v2_val100_t50_32step_gpu/summary.json=metrics/stage3_photo100k_v2_val100_t50_32step_summary.json
 ```
 
+Upload the photo100k Stage 4 `photo_v2` condition-start checkpoint and sampled eval:
+
+```bash
+/home/jwheojjang/venvs/cuda/bin/python scripts/upload_hf_artifact.py \
+  --repo-id jwheo/sr-diffusion \
+  --repo-type model \
+  --message "Upload photo100k Stage 4 v2 condition checkpoint" \
+  --artifact configs/hf/diffusion_photo100k_stage4_condition_v2.yaml=configs/hf/diffusion_photo100k_stage4_condition_v2.yaml \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt=checkpoints/stage4_photo100k_condition_v2_b32_best_eval_condition_decoded.pt \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/summary.json=metrics/stage4_photo100k_condition_v2_b32_summary.json \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_photo100k_stage4_condition_v2_val100_t25_32step/summary.json=metrics/stage4_photo100k_condition_v2_val100_t25_32step_summary.json \
+  --artifact /home/jwheojjang/scratch/sr-diffusion/runs/compare_photo100k_stage3_v2_vs_stage4_condition_v2_val100/summary.json=metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
+```
+
 Make the Hub repository public after license files and the model card are in
 place:
 
