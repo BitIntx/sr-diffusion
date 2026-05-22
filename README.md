@@ -82,14 +82,21 @@ Stage 4 v2 vs Stage 3 v2: +0.1727 PSNR, wins 81 / losses 19
 Stage 4 v2 improves the Stage 3 v2 sampled result and usually stabilizes the
 denoise/sharpening output, but some color/contrast overshoot and small
 cyan/green sampling artifacts remain. A stronger `photo_v3_noise_mix` Stage 2
-run was stopped at step 12700 after eval plateaued around `eval/latent_loss`
-0.282. The current scale-up path is a 500M-class configuration:
+small run was stopped at step 12700 after eval plateaued around
+`eval/latent_loss` 0.282. The 500M-class Stage 2 XL condition encoder then
+completed 80000 steps and beat the small v3 condition encoder:
 
 ```text
 XL Stage 2 condition encoder: configs/latent_pretrain_photo100k_v3_noise_xl.yaml
+XL Stage 2 best latent:       step 66000, eval/latent_loss 0.27230
+XL Stage 2 best PSNR proxy:   step 72000, decoded_psnr 21.52
 XL Stage 4 condition-start:   configs/diffusion_photo100k_xl_stage4_condition_v3.yaml
 XL full inference params:     509.658M
 ```
+
+Stage 4 XL has not been started yet. The next step is to compare the Stage 2
+XL candidate condition encoders, then run the 469.6M U-Net with partial init
+from Stage 4 v2.
 
 For VM migration and continuation context, read:
 
@@ -601,6 +608,15 @@ Run the XL photo100k Stage 2 condition encoder for the 500M-class path:
   --config configs/latent_pretrain_photo100k_v3_noise_xl.yaml
 ```
 
+This run has completed. Important checkpoints are available on Hugging Face:
+
+```text
+checkpoints/stage2_photo100k_v3_noise_xl_b64_best_eval_latent.pt
+checkpoints/stage2_photo100k_v3_noise_xl_b64_step_0072000.pt
+checkpoints/stage2_photo100k_v3_noise_xl_b64_latest.pt
+metrics/stage2_photo100k_v3_noise_xl_b64_summary.json
+```
+
 Recommended Stage 2 tmux launch:
 
 ```bash
@@ -629,9 +645,9 @@ After Stage 2 photo100k finishes, run the photo100k Stage 3 config:
   --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
 ```
 
-After the XL Stage 2 condition encoder finishes, run the 500M-class
+After comparing the XL Stage 2 condition encoder candidates, run the 500M-class
 condition-start U-Net. It can reuse shape-compatible tensors from the smaller
-Stage 4 v2 checkpoint:
+Stage 4 v2 checkpoint. This has not been started yet:
 
 ```bash
 /home/jwheojjang/venvs/cuda/bin/python train_diffusion.py \

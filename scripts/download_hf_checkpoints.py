@@ -19,21 +19,25 @@ PHOTO100K_FILES = [
     *PROTOTYPE_FILES,
     "checkpoints/stage2_photo100k_b64_best_eval_latent.pt",
     "checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt",
+    "checkpoints/stage2_photo100k_v3_noise_xl_b64_best_eval_latent.pt",
     "checkpoints/stage3_photo100k_b32_best_eval_noise.pt",
     "checkpoints/stage3_photo100k_v2_b32_best_eval_noise.pt",
     "checkpoints/stage4_photo100k_condition_b32_best_eval_condition_decoded.pt",
     "checkpoints/stage4_photo100k_condition_v2_b32_best_eval_condition_decoded.pt",
     "configs/latent_pretrain_photo100k.yaml",
     "configs/latent_pretrain_photo100k_v2.yaml",
+    "configs/latent_pretrain_photo100k_v3_noise_xl.yaml",
     "configs/diffusion_photo100k_b32.yaml",
     "configs/diffusion_photo100k_b32_v2.yaml",
     "configs/diffusion_photo100k_b32_stage4_condition.yaml",
     "configs/diffusion_photo100k_b32_stage4_condition_v2.yaml",
+    "configs/diffusion_photo100k_xl_stage4_condition_v3.yaml",
     "configs/hf/diffusion_photo100k_stage4_condition.yaml",
     "configs/hf/diffusion_photo100k_stage4_condition_v2.yaml",
     "configs/hf/diffusion_photo100k_v2.yaml",
     "metrics/stage2_photo100k_b64_summary.json",
     "metrics/stage2_photo100k_v2_b64_summary.json",
+    "metrics/stage2_photo100k_v3_noise_xl_b64_summary.json",
     "metrics/stage3_photo100k_b32_summary.json",
     "metrics/stage3_photo100k_v2_b32_summary.json",
     "metrics/stage3_photo100k_v2_val100_t50_32step_summary.json",
@@ -44,9 +48,16 @@ PHOTO100K_FILES = [
     "metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json",
 ]
 
+PHOTO100K_XL_CANDIDATE_FILES = [
+    *PHOTO100K_FILES,
+    "checkpoints/stage2_photo100k_v3_noise_xl_b64_step_0072000.pt",
+    "checkpoints/stage2_photo100k_v3_noise_xl_b64_latest.pt",
+]
+
 PRESETS = {
     "prototype": PROTOTYPE_FILES,
     "photo100k": PHOTO100K_FILES,
+    "photo100k_xl_candidates": PHOTO100K_XL_CANDIDATE_FILES,
 }
 
 
@@ -60,7 +71,10 @@ def parse_args() -> argparse.Namespace:
         "--preset",
         choices=sorted(PRESETS),
         default="prototype",
-        help="Artifact set to download. 'photo100k' includes larger training handoff checkpoints.",
+        help=(
+            "Artifact set to download. 'photo100k' includes selected handoff checkpoints; "
+            "'photo100k_xl_candidates' also includes Stage 2 XL candidate condition encoders."
+        ),
     )
     parser.add_argument(
         "--file",

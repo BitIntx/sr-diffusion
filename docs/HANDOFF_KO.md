@@ -382,6 +382,52 @@ metrics/stage4_photo100k_condition_v2_val100_t25_32step_summary.json
 metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
 ```
 
+### Stage 2: photo100k v3 noise XL condition encoder
+
+```text
+config: configs/latent_pretrain_photo100k_v3_noise_xl.yaml
+run: latent_pretrain_photo100k_v3_noise_xl_b64
+degradation preset: photo_v3_noise_mix
+params: 18.944M
+selected checkpoint:
+  /home/jwheojjang/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v3_noise_xl_b64/checkpoints/best_eval_latent.pt
+finished step: 80000
+best eval/latent_loss: step 66000, 0.27230
+best decoded PSNR proxy: step 72000, 21.52
+final eval: step 80000, eval/latent_loss 0.27592, decoded_psnr 21.51
+```
+
+비교:
+
+```text
+small v3 best:
+  step 11000, eval/latent_loss 0.28187, decoded_psnr 21.30
+XL best:
+  step 66000, eval/latent_loss 0.27230, decoded_psnr 21.38
+XL best PSNR proxy:
+  step 72000, eval/latent_loss 0.27940, decoded_psnr 21.52
+```
+
+판단:
+
+- XL condition encoder는 small v3를 확실히 넘었다.
+- Stage4 XL을 바로 시작하지 않았다.
+- Stage4 전에 `best_eval_latent.pt`, `step_0072000.pt`, `latest.pt` 세 후보의
+  condition-only decoded sample을 같은 validation 이미지에서 비교하는 것이 좋다.
+- `best_eval_latent.pt`는 latent loss 최선이고, `step_0072000.pt`와
+  `latest.pt`는 decoded PSNR/latent MSE 측면에서 볼 가치가 있다.
+
+HF:
+
+```text
+checkpoints/stage2_photo100k_v3_noise_xl_b64_best_eval_latent.pt
+checkpoints/stage2_photo100k_v3_noise_xl_b64_step_0072000.pt
+checkpoints/stage2_photo100k_v3_noise_xl_b64_latest.pt
+metrics/stage2_photo100k_v3_noise_xl_b64_summary.json
+configs/latent_pretrain_photo100k_v3_noise_xl.yaml
+configs/diffusion_photo100k_xl_stage4_condition_v3.yaml
+```
+
 ## 현재 관찰 / 판단
 
 - 기본 x4 복원력은 잡혔다.
@@ -395,23 +441,27 @@ metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
 - 강한 noise/color-noise curriculum을 가진 Stage2 v3 small run은 step
   12700에서 중단했다. eval이 9k~12k에서 `eval/latent_loss` 약 0.282로
   횡보해, 더 태우는 것보다 500M급 확장으로 넘어가는 판단을 했다.
-- 다음 개선축은 Stage2 XL condition encoder와 Stage4 XL condition-start
-  diffusion U-Net이다.
+- Stage2 XL condition encoder는 80k step까지 완료됐고 small v3를 넘었다.
+- 현재 실행 중인 학습은 없다. Stage4 XL은 아직 시작하지 않았다.
+- 다음 개선축은 Stage2 XL 후보 비교 후 Stage4 XL condition-start diffusion
+  U-Net이다.
 
 ## 다음 작업
 
 우선순위:
 
-1. Stage2 photo100k XL `photo_v3_noise_mix` condition encoder:
-   - config: `configs/latent_pretrain_photo100k_v3_noise_xl.yaml`
-   - params: 18.944M
-   - max_steps: 80000
+1. Stage2 XL condition encoder 후보 비교:
+   - `best_eval_latent.pt`: step 66000, latent loss 최선
+   - `step_0072000.pt`: decoded PSNR proxy 최선
+   - `latest.pt`: step 80000, final eval PSNR proxy가 높고 latent MSE가 낮음
+   - 같은 val 이미지에서 LR / GT / decoded condition output contact sheet를 만든다.
 2. Stage4 photo100k XL condition-start:
    - config: `configs/diffusion_photo100k_xl_stage4_condition_v3.yaml`
    - params: U-Net 469.618M, full path 509.658M
    - init diffusion: Stage4 v2 `best_eval_condition_decoded.pt`
    - use `--partial-init` because architecture is deeper/wider
-   - condition encoder: Stage2 XL best checkpoint
+   - condition encoder: Stage2 XL 후보 비교 후 선택
+   - 아직 시작하지 않았음
 3. A/B review sheet 정리:
    - mild Stage4 vs Stage3 v2 vs Stage4 v2
    - denoise, sharpening, artifact, naturalness 기준
@@ -431,8 +481,11 @@ metrics/stage4_photo100k_condition_v2_compare_stage3_v2_summary.json
 이 repo는 /home/.../sr-diffusion 의 x4 latent diffusion SR 프로젝트다.
 docs/HANDOFF_KO.md 와 docs/VM_RECOVERY_KO.md 를 먼저 읽고 이어서 작업해줘.
 현재 Stage4 photo100k condition-start와 Stage2/Stage3/Stage4 photo100k
-degradation v2 fine-tune 및 sampled eval까지 완료됐다. 다음은
-photo_v3_noise_mix 기반 Stage2 long fine-tune 후 Stage3/Stage4 v3로
-denoise/color-noise 성능을 확인하는 것이다.
+degradation v2 fine-tune 및 sampled eval까지 완료됐고, Stage2 photo100k
+v3 noise XL condition encoder도 80k step까지 완료됐다. Stage4 XL은 아직
+시작하지 않았다. 다음은 Stage2 XL 후보(best/step72000/latest)를 같은 val
+이미지에서 condition-only decoded output으로 비교한 뒤,
+configs/diffusion_photo100k_xl_stage4_condition_v3.yaml 을 Stage4 v2
+checkpoint에서 --partial-init으로 시작할지 결정하는 것이다.
 상업적 이용은 금지이고, raw dataset은 GitHub/HF에 올리지 않는다.
 ```

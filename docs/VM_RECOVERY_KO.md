@@ -38,6 +38,12 @@ photo100k handoff checkpoint까지 모두 받으려면:
 python scripts/download_hf_checkpoints.py --preset photo100k
 ```
 
+Stage2 XL 후보 checkpoint까지 받아서 새 VM에서 비교하려면:
+
+```bash
+python scripts/download_hf_checkpoints.py --preset photo100k_xl_candidates
+```
+
 다운로드 위치:
 
 ```text
@@ -48,6 +54,9 @@ metrics/
 
 주의: `--preset photo100k`는 Stage3 photo100k checkpoint가 포함되어
 다운로드 용량이 크다.
+
+`--preset photo100k_xl_candidates`는 Stage2 XL 후보 checkpoint 3개까지
+포함하므로 더 크다.
 
 ## 4. 추론만 해보기
 
@@ -125,6 +134,7 @@ photo/val: 100
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/autoencoder_photo10k_b16_eval_online/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_b64/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints
+mkdir -p /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v3_noise_xl_b64/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints
 mkdir -p /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition/checkpoints
@@ -138,6 +148,15 @@ cp checkpoints/stage2_photo100k_b64_best_eval_latent.pt \
 
 cp checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt \
   /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v2_b64/checkpoints/best_eval_latent.pt
+
+cp checkpoints/stage2_photo100k_v3_noise_xl_b64_best_eval_latent.pt \
+  /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v3_noise_xl_b64/checkpoints/best_eval_latent.pt
+
+cp checkpoints/stage2_photo100k_v3_noise_xl_b64_step_0072000.pt \
+  /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v3_noise_xl_b64/checkpoints/step_0072000.pt
+
+cp checkpoints/stage2_photo100k_v3_noise_xl_b64_latest.pt \
+  /home/$USER/scratch/sr-diffusion/runs/latent_pretrain_photo100k_v3_noise_xl_b64/checkpoints/latest.pt
 
 cp checkpoints/stage3_photo100k_b32_best_eval_noise.pt \
   /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32/checkpoints/best_eval_noise.pt
@@ -157,8 +176,9 @@ cp checkpoints/stage4_photo100k_condition_v2_b32_best_eval_condition_decoded.pt 
 
 ## 7. 이어서 할 작업
 
-현재 이어서 할 작업은 Stage4 v2 sampled 결과를 바탕으로 artifact 억제와
-A/B review를 진행하는 것이다. Stage4 v2 sampled eval 재현:
+현재 이어서 할 작업은 Stage2 XL condition encoder 후보를 비교한 뒤
+Stage4 XL condition-start를 시작할지 결정하는 것이다. Stage4 v2 sampled
+eval 재현은 baseline 확인용으로 필요할 때만 실행한다:
 
 ```bash
 python eval_diffusion_samples.py \
@@ -174,9 +194,23 @@ python eval_diffusion_samples.py \
 그 다음:
 
 ```text
-denoise/sharpening A/B review against Stage3 v2 and mild baseline
+Stage2 XL best/step72000/latest condition-only decoded output 비교
+Stage4 XL condition-start를 Stage4 v2 checkpoint에서 --partial-init으로 시작
+denoise/sharpening A/B review against Stage3 v2, Stage4 v2, and mild baseline
 cyan/green dot artifact and color/contrast overshoot mitigation experiments
 ```
+
+Stage4 XL 시작 명령 예시:
+
+```bash
+python train_diffusion.py \
+  --config configs/diffusion_photo100k_xl_stage4_condition_v3.yaml \
+  --init-checkpoint /home/$USER/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt \
+  --partial-init
+```
+
+주의: 이 명령은 Stage4 XL 학습을 시작한다. VM 인수인계 직후에는 먼저
+condition encoder 후보 비교를 하는 것이 권장된다.
 
 ## 8. tmux / 모니터링
 
