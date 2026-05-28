@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from sr_diffusion.datasets import ManifestImageDataset
+from sr_diffusion.losses.reconstruction import charbonnier_loss, laplacian_loss, sobel_edge_loss
 from sr_diffusion.models import AutoencoderKL, ConditionalUNet, LRToLatentPredictor, NoiseScheduler
 from sr_diffusion.utils import (
     autocast_context,
@@ -478,6 +479,10 @@ def main() -> None:
     loss_cfg = config.get("loss", {})
     noise_loss_weight = float(loss_cfg.get("noise_weight", 1.0))
     x0_loss_weight = float(loss_cfg.get("x0_weight", 0.0))
+    decoded_loss_weight = float(loss_cfg.get("decoded_weight", 0.0))
+    edge_loss_weight = float(loss_cfg.get("edge_weight", 0.0))
+    highpass_loss_weight = float(loss_cfg.get("highpass_weight", 0.0))
+    charbonnier_eps = float(loss_cfg.get("charbonnier_eps", 1e-3))
     best_metric = str(eval_cfg.get("best_metric", "eval/noise_mse"))
     best_mode = str(eval_cfg.get("best_mode", "min"))
     best_checkpoint = str(eval_cfg.get("best_checkpoint", "best_eval_noise.pt"))
@@ -524,13 +529,40 @@ def main() -> None:
                 )
                 predicted_noise = model(noisy, timesteps, condition, domain_id)
                 noise_loss = F.mse_loss(predicted_noise, target_noise)
-                if x0_loss_weight > 0.0:
+                needs_predicted_x0 = (
+                    x0_loss_weight > 0.0
+                    or decoded_loss_weight > 0.0
+                    or edge_loss_weight > 0.0
+                    or highpass_loss_weight > 0.0
+                )
+                if needs_predicted_x0:
                     predicted_x0 = scheduler.predict_x0_from_noise(noisy, timesteps, predicted_noise)
+                else:
+                    predicted_x0 = None
+                if x0_loss_weight > 0.0 and predicted_x0 is not None:
                     x0_loss = F.mse_loss(predicted_x0, target_latent)
-                    loss = noise_loss_weight * noise_loss + x0_loss_weight * x0_loss
                 else:
                     x0_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
-                    loss = noise_loss_weight * noise_loss
+                if (
+                    (decoded_loss_weight > 0.0 or edge_loss_weight > 0.0 or highpass_loss_weight > 0.0)
+                    and predicted_x0 is not None
+                ):
+                    decoded = vae.decode(predicted_x0)
+                    target_image = normalize_image(hr)
+                    decoded_loss = charbonnier_loss(decoded, target_image, eps=charbonnier_eps)
+                    edge_loss = sobel_edge_loss(decoded, target_image, eps=charbonnier_eps)
+                    highpass_loss = laplacian_loss(decoded, target_image, eps=charbonnier_eps)
+                else:
+                    decoded_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                    edge_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                    highpass_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                loss = (
+                    noise_loss_weight * noise_loss
+                    + x0_loss_weight * x0_loss
+                    + decoded_loss_weight * decoded_loss
+                    + edge_loss_weight * edge_loss
+                    + highpass_loss_weight * highpass_loss
+                )
                 scaled_loss = loss / grad_accum_steps
 
             scaled_loss.backward()
@@ -547,6 +579,9 @@ def main() -> None:
                     f"step={step} loss={float(loss.detach().cpu()):.5f} "
                     f"noise_mse={float(noise_loss.detach().cpu()):.5f} "
                     f"x0_mse={float(x0_loss.detach().cpu()):.5f} "
+                    f"decoded={float(decoded_loss.detach().cpu()):.5f} "
+                    f"edge={float(edge_loss.detach().cpu()):.5f} "
+                    f"highpass={float(highpass_loss.detach().cpu()):.5f} "
                     f"steps_per_sec={interval_steps / elapsed:.2f}"
                 )
                 wandb_log(
@@ -555,6 +590,9 @@ def main() -> None:
                         "train/loss": float(loss.detach().cpu()),
                         "train/noise_mse": float(noise_loss.detach().cpu()),
                         "train/x0_mse": float(x0_loss.detach().cpu()),
+                        "train/decoded_charbonnier": float(decoded_loss.detach().cpu()),
+                        "train/edge_sobel": float(edge_loss.detach().cpu()),
+                        "train/highpass_laplacian": float(highpass_loss.detach().cpu()),
                         "train/lr": optimizer.param_groups[0]["lr"],
                         "system/steps_per_sec": interval_steps / elapsed,
                     },

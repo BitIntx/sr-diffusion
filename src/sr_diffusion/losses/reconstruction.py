@@ -3,10 +3,52 @@ from __future__ import annotations
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 
 
 def charbonnier_loss(prediction: torch.Tensor, target: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
     return torch.sqrt((prediction - target).pow(2) + eps * eps).mean()
+
+
+def _depthwise_filter(image: torch.Tensor, kernel: torch.Tensor) -> torch.Tensor:
+    channels = int(image.shape[1])
+    weight = kernel.to(device=image.device, dtype=image.dtype).view(1, 1, 3, 3).repeat(channels, 1, 1, 1)
+    return F.conv2d(image, weight, padding=1, groups=channels)
+
+
+def sobel_edge_loss(prediction: torch.Tensor, target: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
+    sobel_x = prediction.new_tensor(
+        [
+            [1.0, 0.0, -1.0],
+            [2.0, 0.0, -2.0],
+            [1.0, 0.0, -1.0],
+        ]
+    ) / 8.0
+    sobel_y = prediction.new_tensor(
+        [
+            [1.0, 2.0, 1.0],
+            [0.0, 0.0, 0.0],
+            [-1.0, -2.0, -1.0],
+        ]
+    ) / 8.0
+    pred_x = _depthwise_filter(prediction, sobel_x)
+    pred_y = _depthwise_filter(prediction, sobel_y)
+    target_x = _depthwise_filter(target, sobel_x)
+    target_y = _depthwise_filter(target, sobel_y)
+    return 0.5 * (charbonnier_loss(pred_x, target_x, eps=eps) + charbonnier_loss(pred_y, target_y, eps=eps))
+
+
+def laplacian_loss(prediction: torch.Tensor, target: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
+    kernel = prediction.new_tensor(
+        [
+            [0.0, 1.0, 0.0],
+            [1.0, -4.0, 1.0],
+            [0.0, 1.0, 0.0],
+        ]
+    ) / 4.0
+    pred_high = _depthwise_filter(prediction, kernel)
+    target_high = _depthwise_filter(target, kernel)
+    return charbonnier_loss(pred_high, target_high, eps=eps)
 
 
 def kl_loss(mean: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
