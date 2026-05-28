@@ -40,6 +40,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tile-overlap", type=int, default=32, help="LR-pixel overlap between 128x128 tiles.")
     parser.add_argument("--tile-batch-size", type=int, default=1, help="Number of LR tiles to sample at once.")
     parser.add_argument("--save-every", type=int, default=0, help="Save intermediate samples every N sampler steps.")
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=4,
+        help="Print sampler progress every N DDIM steps. Set to 0 to disable.",
+    )
     return parser.parse_args()
 
 
@@ -225,6 +231,8 @@ def ddim_sample(
     seed: int,
     output_dir: Path,
     save_every: int = 0,
+    progress_every: int = 4,
+    progress_label: str = "sample",
 ) -> torch.Tensor:
     device = lr.device
     generator = torch.Generator(device=device)
@@ -252,6 +260,14 @@ def ddim_sample(
     else:
         raise ValueError(f"Unsupported init: {init}")
     alphas_cumprod = scheduler.alphas_cumprod.to(device=device, dtype=latent.dtype)
+
+    total_steps = len(timesteps)
+    if progress_every > 0:
+        print(
+            f"{progress_label} sampler_start steps={total_steps} batch={lr.shape[0]} "
+            f"init={init} start_timestep={int(timesteps[0].item())}",
+            flush=True,
+        )
 
     with torch.no_grad():
         for index, timestep in enumerate(timesteps):
@@ -281,6 +297,15 @@ def ddim_sample(
                     preview = vae.decode(latent)
                 for sample_idx, image in enumerate(denormalize(preview)):
                     tensor_to_pil(image).save(output_dir / f"sample_{sample_idx:02d}_step_{index + 1:03d}.png")
+            step_index = index + 1
+            if progress_every > 0 and (
+                step_index == 1 or step_index % progress_every == 0 or step_index == total_steps
+            ):
+                print(
+                    f"{progress_label} ddim_step={step_index}/{total_steps} "
+                    f"timestep={int(timestep.item())}",
+                    flush=True,
+                )
 
     with torch.no_grad(), autocast_context(device, dtype_name):
         decoded = vae.decode(latent)
@@ -306,6 +331,7 @@ def tiled_sample(
     seed: int,
     output_dir: Path,
     device: torch.device,
+    progress_every: int = 4,
 ) -> Image.Image:
     if tile_batch_size <= 0:
         raise ValueError(f"tile_batch_size must be positive: {tile_batch_size}")
@@ -325,10 +351,18 @@ def tiled_sample(
     tiles: list[tuple[int, int]] = [(x, y) for y in y_positions for x in x_positions]
     print(
         f"tile_inference lr_size={original_width}x{original_height} padded={padded_width}x{padded_height} "
-        f"tiles={len(tiles)} tile={tile_lr_size} overlap={overlap_lr} batch={tile_batch_size}"
+        f"tiles={len(tiles)} tile={tile_lr_size} overlap={overlap_lr} batch={tile_batch_size}",
+        flush=True,
     )
+    num_batches = (len(tiles) + tile_batch_size - 1) // tile_batch_size
     for batch_start in range(0, len(tiles), tile_batch_size):
+        batch_index = batch_start // tile_batch_size + 1
         batch_coords = tiles[batch_start : batch_start + tile_batch_size]
+        print(
+            f"tile_batch_start={batch_index}/{num_batches} "
+            f"tiles={batch_start + 1}-{batch_start + len(batch_coords)}/{len(tiles)}",
+            flush=True,
+        )
         batch_images = [
             pil_to_tensor(padded.crop((x, y, x + tile_lr_size, y + tile_lr_size))) for x, y in batch_coords
         ]
@@ -350,6 +384,8 @@ def tiled_sample(
                 seed=seed + batch_start,
                 output_dir=output_dir,
                 save_every=0,
+                progress_every=progress_every,
+                progress_label=f"tile_batch={batch_index}/{num_batches}",
             )
 
         for tile_output, (x, y) in zip(output, batch_coords, strict=True):
@@ -370,7 +406,7 @@ def tiled_sample(
             y0 = y * scale
             canvas[y0 : y0 + tile_hr_size, x0 : x0 + tile_hr_size] += tile_array * mask
             weights[y0 : y0 + tile_hr_size, x0 : x0 + tile_hr_size] += mask
-        print(f"tiles_done={min(batch_start + len(batch_coords), len(tiles))}/{len(tiles)}")
+        print(f"tiles_done={min(batch_start + len(batch_coords), len(tiles))}/{len(tiles)}", flush=True)
 
     stitched = canvas / np.maximum(weights, 1e-6)
     stitched = stitched[: original_height * scale, : original_width * scale]
@@ -411,7 +447,9 @@ def main() -> None:
         lr_image.save(args.output_dir / "input_lr.png")
         print(
             f"checkpoint_step={checkpoint_step} lr_size={lr_image.size} steps={steps} "
-            f"eta={args.eta} init={init} start_timestep={start_timestep} device={device}"
+            f"eta={args.eta} init={init} start_timestep={start_timestep} device={device} "
+            f"progress_every={args.progress_every}",
+            flush=True,
         )
         output = tiled_sample(
             model=model,
@@ -432,9 +470,10 @@ def main() -> None:
             seed=args.seed,
             output_dir=args.output_dir,
             device=device,
+            progress_every=args.progress_every,
         )
         output.save(args.output_dir / "sr_00.png")
-        print(f"saved {args.output_dir}")
+        print(f"saved {args.output_dir}", flush=True)
         return
 
     lr_image, gt_image = prepare_inputs(args, config)
@@ -447,7 +486,8 @@ def main() -> None:
     print(
         f"checkpoint_step={checkpoint_step} lr_size={lr_image.size} steps={steps} "
         f"eta={args.eta} init={init} start_timestep={start_timestep} "
-        f"samples={args.num_samples} device={device}"
+        f"samples={args.num_samples} device={device} progress_every={args.progress_every}",
+        flush=True,
     )
 
     output = ddim_sample(
@@ -465,10 +505,12 @@ def main() -> None:
         seed=args.seed,
         output_dir=args.output_dir,
         save_every=args.save_every,
+        progress_every=args.progress_every,
+        progress_label="sample",
     )
     for index, image in enumerate(output):
         tensor_to_pil(image).save(args.output_dir / f"sr_{index:02d}.png")
-    print(f"saved {args.output_dir}")
+    print(f"saved {args.output_dir}", flush=True)
 
 
 if __name__ == "__main__":
