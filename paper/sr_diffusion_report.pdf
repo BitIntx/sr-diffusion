@@ -1,101 +1,112 @@
 %PDF-1.4
+%“Œ‹ž ReportLab Generated PDF document (opensource)
 1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
+<<
+/F1 2 0 R /F2 3 0 R
+>>
 endobj
 2 0 obj
-<< /Type /Pages /Kids [5 0 R 7 0 R] /Count 2 >>
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
 endobj
 3 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+<<
+/BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding /Name /F2 /Subtype /Type1 /Type /Font
+>>
 endobj
 4 0 obj
-<< /Length 2038 >>
-stream
-BT /F1 15 Tf 72 760 Td (Vision-Only Latent Diffusion Super-Resolution without T2I Pretraining) Tj ET
-BT /F1 10 Tf 72 740 Td (Work-in-progress technical report) Tj ET
-BT /F1 10 Tf 72 725 Td () Tj ET
-BT /F1 13 Tf 72 710 Td (Abstract) Tj ET
-BT /F1 10 Tf 72 690 Td (This project trains an x4 super-resolution model directly, without importing) Tj ET
-BT /F1 10 Tf 72 675 Td (a pretrained text-to-image diffusion backbone. The active implementation is) Tj ET
-BT /F1 10 Tf 72 660 Td (Stage 1: a factor-4 VAE / autoencoder trained on 512px HR crops so later) Tj ET
-BT /F1 10 Tf 72 645 Td (stages can operate in latent space.) Tj ET
-BT /F1 10 Tf 72 630 Td () Tj ET
-BT /F1 13 Tf 72 615 Td (Goal) Tj ET
-BT /F1 10 Tf 72 595 Td (- LR 128x128 -> HR 512x512.) Tj ET
-BT /F1 10 Tf 72 580 Td (- LR 192x192 -> HR 768x768 later.) Tj ET
-BT /F1 10 Tf 72 565 Td (- One future model for photo and anime/illustration domains through domain conditioning.) Tj ET
-BT /F1 10 Tf 72 550 Td (- PyTorch/ROCm first, no custom CUDA/ROCm ops.) Tj ET
-BT /F1 10 Tf 72 535 Td () Tj ET
-BT /F1 13 Tf 72 520 Td (Planned Pipeline) Tj ET
-BT /F1 10 Tf 72 500 Td (HR image -> factor-4 VAE -> HR latent.) Tj ET
-BT /F1 10 Tf 72 485 Td (LR image -> condition encoder -> multi-scale LR features.) Tj ET
-BT /F1 10 Tf 72 470 Td (Noisy HR latent + LR features + timestep + domain embedding -> diffusion U-Net.) Tj ET
-BT /F1 10 Tf 72 455 Td (The VAE decoder maps the final denoised latent back to the x4 HR output.) Tj ET
-BT /F1 10 Tf 72 440 Td () Tj ET
-BT /F1 13 Tf 72 425 Td (Current Implementation) Tj ET
-BT /F1 10 Tf 72 405 Td (- Manifest dataset loader with photo/anime domain IDs.) Tj ET
-BT /F1 10 Tf 72 390 Td (- On-the-fly x4 degradation pipeline.) Tj ET
-BT /F1 10 Tf 72 375 Td (- Factor-4 AutoencoderKL.) Tj ET
-BT /F1 10 Tf 72 360 Td (- bf16 PyTorch/ROCm training.) Tj ET
-BT /F1 10 Tf 72 345 Td (- W&B online logging.) Tj ET
-BT /F1 10 Tf 72 330 Td (- Fixed LR / GT / HR validation image logging.) Tj ET
-BT /F1 10 Tf 72 315 Td (- Validation metrics: loss, recon, KL, MSE, PSNR.) Tj ET
-endstream
+<<
+/Contents 10 0 R /MediaBox [ 0 0 612 792 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
 endobj
 5 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+<<
+/Contents 11 0 R /MediaBox [ 0 0 612 792 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
 endobj
 6 0 obj
-<< /Length 2156 >>
-stream
-BT /F1 13 Tf 72 760 Td (Current Training Run) Tj ET
-BT /F1 10 Tf 72 740 Td (- Config: configs/autoencoder_photo10k.yaml.) Tj ET
-BT /F1 10 Tf 72 725 Td (- Run: autoencoder_photo10k_b16_eval_online.) Tj ET
-BT /F1 10 Tf 72 710 Td (- Training data: 10,000 photo images.) Tj ET
-BT /F1 10 Tf 72 695 Td (- Validation data: 100 photo images.) Tj ET
-BT /F1 10 Tf 72 680 Td (- HR crop: 512px.) Tj ET
-BT /F1 10 Tf 72 665 Td (- Latent: 128px, 16 channels.) Tj ET
-BT /F1 10 Tf 72 650 Td (- Batch size: 16.) Tj ET
-BT /F1 10 Tf 72 635 Td (- Max steps: 100,000, about 160 epochs.) Tj ET
-BT /F1 10 Tf 72 620 Td (- Eval cadence: every 1,000 steps.) Tj ET
-BT /F1 10 Tf 72 605 Td (- Fixed sample cadence: every 500 steps.) Tj ET
-BT /F1 10 Tf 72 590 Td () Tj ET
-BT /F1 13 Tf 72 575 Td (Evaluation) Tj ET
-BT /F1 10 Tf 72 555 Td (The current evaluation is VAE-only: HR -> encode -> decode -> reconstruction.) Tj ET
-BT /F1 10 Tf 72 540 Td (Fixed validation samples are logged so visual progress is comparable over time.) Tj ET
-BT /F1 10 Tf 72 525 Td (The best checkpoint is selected by eval/recon, with PSNR and sample quality as) Tj ET
-BT /F1 10 Tf 72 510 Td (supporting signals.) Tj ET
-BT /F1 10 Tf 72 495 Td () Tj ET
-BT /F1 13 Tf 72 480 Td (Roadmap) Tj ET
-BT /F1 10 Tf 72 460 Td (1. Finish Stage 1 VAE training and choose a checkpoint.) Tj ET
-BT /F1 10 Tf 72 445 Td (2. Train deterministic LR -> HR latent pretraining.) Tj ET
-BT /F1 10 Tf 72 430 Td (3. Train conditional latent diffusion for SR.) Tj ET
-BT /F1 10 Tf 72 415 Td (4. Add perceptual/GAN fine-tuning if needed.) Tj ET
-BT /F1 10 Tf 72 400 Td (5. Distill to fewer inference steps.) Tj ET
-BT /F1 10 Tf 72 385 Td (6. Evaluate checkpoints with fixed A/B preference tests.) Tj ET
-BT /F1 10 Tf 72 370 Td () Tj ET
-BT /F1 13 Tf 72 355 Td (Limitations) Tj ET
-BT /F1 10 Tf 72 335 Td (This is not yet a complete SR diffusion model. The current active run trains) Tj ET
-BT /F1 10 Tf 72 320 Td (only the VAE reconstruction model. Anime/illustration data has not yet been) Tj ET
-BT /F1 10 Tf 72 305 Td (added to the active training set, and this report does not claim a novel) Tj ET
-BT /F1 10 Tf 72 290 Td (published method.) Tj ET
-endstream
+<<
+/Contents 12 0 R /MediaBox [ 0 0 612 792 ] /Parent 9 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
 endobj
 7 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+<<
+/PageMode /UseNone /Pages 9 0 R /Type /Catalog
+>>
+endobj
+8 0 obj
+<<
+/Author (\(anonymous\)) /CreationDate (D:20260528121159+00'00') /Creator (\(unspecified\)) /Keywords () /ModDate (D:20260528121159+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (\(unspecified\)) /Title (\(anonymous\)) /Trapped /False
+>>
+endobj
+9 0 obj
+<<
+/Count 3 /Kids [ 4 0 R 5 0 R 6 0 R ] /Type /Pages
+>>
+endobj
+10 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ] /Length 2282
+>>
+stream
+Gat=,>C5Be&:O#NQm]Vb(MA/W"&EJ9Cn]$=)AZX">=l3p%EiIkr-FB6=a%AJ$u,"FT.J7Kkfd_[%b^V:l9!+E^0f<X+!#B,>-?!;V`l[Sl%eBFh`$Re)7\.OB"%V4EfAaf]\_FOWFMa7=I;I?926m(\[E45\PkGEn9CALm7/dR=]cc'ln^fE%4`@.kNhe9NmcCZ@^WUOU<Ie?*8'jp>OED5\dr/sne3Ui+_MQb_bSp(2/DKE(VJCBcRmbRVt4d1SG4+s=,qrrEFe?4qu>@dYB@gX\H9a8T"&r'ot=0P(U]MHe!%(NC;/CZAM&4,L@``Y')G[tin2Z.RtZF%j_^De)/E>hYlc]@\HGqIE@&&)6d<%lGFL0I2=ZE`97K*&&f2umYlQ+P`Y+-:1&G)H)7oufpQn\2BS7[d,arZ"TA-uC^fDdVB>nSm6""%8*m.V+>Z8*:luor$Jne>O23?MQH!KrjR%Ti?Ac6H8_Q)mA;_oT\i+%@L@bih;Hkm178[48OPk#`cJ]#-n(I`$N<Lg:MTe+Nd-4lC#cDB8fdhMp&G%dtS[!444V!$,T:7bNu_5=Tp19aAh.oj5k)-0A(#qd,^jVkS2JQQ&Z5(1*@@6uE?eiCT51d!Kr*u@i&]7lNXnQ,<K1QgZp/j5.Lda*n-'*:c%)4"rF@(1k*<jS"5#mSGCUA(bfW5,hS87]A1%N$.\B[I7dq<Ln8_\-@ib5dmaM86RW>=fT?%uaOu78g"a2UG*I0c+XTM[d[)[]*aj=[h;PY'I=rG57@DJ<;%g0uE<\05/\s(>lWV:onMa[to)0#7hYsM)2<2.c3XPL7C,BT4'j_.+toe\LKU)gW)WN'%X5/>"pQPa[UWla3*r:#grV/9RI#hr0mEWYkfW_r.SG-ld'/fd_kYW`X!"+0I3/j4Nf;k+A'R03=o6DCsZ1UqCS"%#@-o2+HRphg]K0T\!V8A/4id(1NsA>jIB?i*H2TuAVGg.Qt.WZHrJCh"IBjq.[a+XEe<$;[%JDGapbE'FdZ`*.8_""/E.(.<?$oY#@J7O<6-0_`%NE4:!13Sj&R&`ca8Nk]1c1V6o+7YG,lIE]P>n!m+AOo8VCC]9f9t*dTOTdgs\9W4:i`2nn7A.-M`+8<Mlp_/T1X<Xr\aM2]jIc]]]urg's3%OpOS:?@J%-i^35!Mepdm)BYfb*k+A8?PsL+]7g`364V?m;mVZ[*V`bX-7EN.A/c<gl^/rpFKb6Fp>b\-R+C!J0!e54VXu*Q'dXYu#!;HeUO4F68*,ia,/>=kmOJ1>I)XO`:ado:&;2+m>:"e).b`[GUC^8M[*H#d#Y@]fYTie@K@/RB1Vt^sR[rE'(HU/eCT.iA2KOcgmCq3;3*3kdene"(\'C-&?Ll;]8j7%h3Sq1jQID^r(@r\XjZrubPIdj8imr1'lb.?mHIka&dQ=r0/j?Et:*&&bbZlSe:@23@B!cXs5=Mtq7KKc,f)t#<"N2?CoI^7*Fb!_sVIZ[)a&K#tiiO0EYP6V_jK4PlV74/f!Kk!?pXH(3b#f?:Pa-TZ\&S-pSN5;K*aJ>b2O9TQH&dpL"V!gMft6FgU2@n]XCC!?9`$E^akp]J<0[oZAOsZ!0E7rP,kkMGFir\I'r'@#'bJUL-J=DF&pe3]XQtjCpLKjQr?=DG)qcj`_]J<S),=_jilP]C"`&WpB2X)JbN;H:j?hNX-.snNhA:PK>$.h-*_WHAnLODJbCcq!"OYY04@'-Y:,pa#kXRlrCQ/r8L#ns6R*ZkbE1MN.Gr/#pht%g8XoI8nh;:H0J&Cl;MegrmTR23_8*ep$ak/<2SL1^I4!D<9j8SJkiko!V>.34#[W(_3[HdIdn%SrCRuLVB7;JVsb-H'7MD.0MBdc0Z#O4nV_WoIe#a*WLC32\h&Tt>W'k_)6UF=I:2_Eus_LJRJjf=j!XEB-"2b>B"HOk9JX7,rQ*bhCnl[nBVPCN6$(Rb`UT82K_EjCBn6&_t]3O2>I&h-IiSV.40q@j)_q)k<5(t^X3iWK9+6;RK7r>AY]a,6B[MScoeYXEt`8WfU!^j&1-V2Ep>c,0Fk`Tbo:"mT[Jm@@u,_0r\3Q9Y\oFRWSaWn74s?NQa]n',#@,h^q`rfTZ4gTeGK+5"0K4t#',3cn)<N60[E*8B&<F]j@R5*U&(;Rd!%/%Osf8G<W^foiC#j8*jRSS;!9qHa#@1N`fRG8/:Z8TC6IP8^h`B_MVrF8Ob:mVt0$on-++)Z"%[\)!u)R8Ma_URl6jESHI6]rb%BJJ1#Y74N-BZt[:U&)I-kmYNEX~>endstream
+endobj
+11 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ] /Length 2260
+>>
+stream
+Gatm=gN)%,&:O:Sm%^'(1]W-:bk*(#31Y6P2RPE1^1eu&Or.,n8lED$I2<\d1aPtYQ$=k-b?aJoZKLQu'F=\7opMo_5#1&$1Bkp/Z2i$1%[/Pb4ZWE.N#KrkGqh^Oi+KJf3Do?nH"K`[AP%h$$9LTbN5B*7k?mP&S^u+@DkAuJ(RTT*ah**V%0DT5qQg>7&$'[UPfB&s'ho'=[GDUl'm'0E$d?Sq:?Q>\=65e[4htZ0[FOocT9`L6M!6sMlIj7hs,"MJcb.>cs'YVMqtlf%!dHgXe_"[8obeH_LB8O>V341DA7(FiOB<C75+kJ7/&b"1V#eR1jV[j9W;iWALAOE,hQOUO@2'd:8SZQTP7)L*RFsA>GP:ru?0YYACl>`I%sMm%'PR()_f]nf%KmI9,;/NA`S)hr`7&UlE][D1BLF"!l+,sgZB`N!2cX1mO>i8=gId]52&GpbD(R(.dhrUmiZTnN<E\CZ\D!?-=#2s&qIM7aWq83O#Cj,MQo<c"cE5j.KbhQ3aSf]!MG;F)GAQ-cYmE]1FXuGtk%G4<EK0$F#Vh5MH#>;**7P$*mfj*>`Y'upeS2c1D4P=7=eQSFV8]m8Tg+Y)I\]GpCO2i.FNg:Q-6Aj;M-[Z0i'7`s?b?G"'$lWVR#ba4)K+#gol65S`1tH/JH>L_D0?F3q]MPcjFrQZPe,HOXEeWYq"OnYZucQt>3Z5&1\<sE$,XW'I_#KB5ieuk<cS]m;p75Fe+&sfOoP:%iB_Qpjs\;2Hr*/pKq6rbeoBK50-T+aIEp$K=lJ]nN&^HL\*U&;*<Oc+[8+k;NLalr.Rp[.C+\3)VFJd#o<O!IM5R$lZh,N&]he(:VIm1\rdo:s7Fa4[4@X=\,>b%GiK)4".*hG'@bY9>d#[(.9OGhY/Aq#Q]CCS#RlPl0qs,"7pOWt=H+GQ-VKDoVLHg(pNht6\C2=7+7b[G_,4%F9(H^d;WKDe[)/5WgQ)QbK"@r)pjqW-27-m;Ae4DV"5V7'Z@/'MJ[/rTF*<Mn"mT!+VC&nnG$J!5_@0a=o1f^#ol<uD)#5W$B0R4Kp!0d;r>>(X(9B^4fXt/98;[dZMk5^F(Zu2Qdo&Zl'SfqHZlKSDPAFX+AVcULCn$X#bjc^eV!.KQ-Ock,.fcitYK-OA+pPE\6K`?.[G[TRZpca0j5PS2qodTe]@nl:%EL&\dg@"HX5K?O9oT+:+S`La5p6ftT"Co<9a!l!.kR_?GZ/P+oCfI0jUP<3?]F+Cn%iTP"`gh`1JredI!Vg?%'7@CC#HS[8B^$(UZucR;>.UcK,%cS\:LdelZd=h9/3]A$TaOP?Rpbae5AKD!q<V8$!!X9S)G&%3bQN)TZgPIT"n"0R.9sYuhQ@uupg#dMSL06E70C(pN:W%-0CuSnPM*&-0ZVdIB&r%d&A@X'R^LQl/%1UIX"6mi"f;IW'NKR8BSU.*edaJ!AlVj5o%0tl!`bi@nnM;8@1X(W[Ee0t8'm2`Y*t[\5HEp([@"V6psbur>jM+V89F2h$r._O6t#1LbV?%d3<,XQ%/52M,/f4;DbJapA$oKW2S'E"r@_^u&].V\B[M9!8MA5sNVk$WU/`Yj>#oi%o)QDuDLP!mJLb.($VUXUq5WdemDOhWdVknA=c.[n-)q-%gg"G[MV]-'U:B!SppQIVNqMLm`f<3Z_2kfj/F.kNfYb#"!tQj82'T2hJRXsX>6`X5RM&qEKVS$pU4J0#B;^Brp^Nb#/*u)51:goX-qs;ulm2[jS=P5&8OmY4qu7njVW(OYL?SC(m#KKW7r1"OUEsDDph5U,<DkJhZlpGe@[h$hYo,V>8iLp9/*9g`k^pb'r91IpK;5>"DG9qM[:.im(XXkTNOp*UcWW--P3t'-P3t'-P3s0R(qq:Z,,\jWr9:+bYoidIZ*0b=pmH.=5LZBMYEPU?I:p/Y$L<mDL(l"$(?tHge/`s0H7W'9O(9V'<g5a$<^b\5W`H)Nq/t:<<$h5Ce[F:MgYI9*\uiEaPod3BH2.*l>/<+)*XlsO@?p-?68e@?7m-9M.gW+V<0'1BlhT]2q?!)mnlG@A]m+CYeNQ>O.`E%A/PiL[qX7U!&5QD>jD/c-DDlK@D:)E?!1+.Ts47&n"'M8-XaNY*IO!:h/i0YuX/T_:%GorYoT<&sqh6X*h"]]D%^>G1$$!gX_KoKU9P?6mNr"6S9E8u&lST='IuGf=p:kB&&on'Ol'i!%,^N:`U!=#;HfEK??GF/):r9nm%4-/*(3X($RsU.I$8nEkg&H*n\$,~>endstream
+endobj
+12 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ] /Length 1072
+>>
+stream
+Gat=);01_T&:WeDlsm1#N[6BHa5/]*VN^>Ai9Bl6a>2=8[TlC!_S<jNA:.&\_G)c)RaphT]DI"3"B)m'puMt#`r^-C'-J!H$HODo5k+hu`T4c?)*B^DjKKgWrpg9\Bs=**A-gFIA3.Z&nJJb98t]kUk+f-j*k-W9TJQH;0Epc1#:oZC!K+'Wr:21pXHnZ"`26*uF0[(S?0Re!*@X_6.:&S?><irSOhBRC%RsF7LmEtn.Yo7Sfk'C6Lcj#7VoX=3J)^ELP-!gF")jg$h^8`Ti+:>kF:I)J$4=4T=JYPA#%Lnt)sN26*Gr<7`fhrD.k[T^X?;b37pM&A1ll8K*/oB&l`CLl)HH:Ec8&)[#CRS?;P8J<\"Do`1p<78:VB%4*,N1R::W?:]j+f.5k3tKKYTX*-o@S2[BrbFhDZM!#d-m9Ja913_MJoDCF>)5Rhg+H%LN(1!2ZcshFcUU1JG6_h#hFc]FW?pB-ar_);Ti->Dn*!8qCfl_"U<#$d=S.grS&TDG8$63Zo>BI>P0kg(_&#>7n2@#\30#j(]_Hn65=Z:.nq2B.`I<W#B`D==F$\io6@T=YcTj/FtIHjOtm$,o0)GIoq)[NHCiqq`]&/,k'ogkO3GI?^u^]pTbOT(fFg2Vi?=$)o';#PL&6AcRH6T!<]KlCd;(3`$$o??,';tCE+FZ=mIhoU)'Dhfo)9[9Sr6/(hlBEHfY=:d+-k7=fE@)7aT?n?>>=*X@;&O<'tS$2h@71MsIg9h@T#H2XJM;pe%fS?11+j#N:]=U6R_lL9V#[=?rf=Q5g-[IZaL_^1T15(U;EFMQ0`d6=,GeGQ1rMK:\mhm5,N-=GIG(#D]!f`89GlZYl.U!o$A'^$^:Z%d-"9h/7se?B\c_/MBXKS"KYS\L,/;nV)EdJRj3UI?GTSR/80ROGKR!*TK""3D:_tpd=K8fg])GqS;ZM_tF/?LDD7N;5c.reaUBPabScnGKCY,$>$.)l(?!*ckQL@Y1/s'(C%9L?TCaq45$nX)/!G,6fgHPRa["_dH)F+A`6>AJFV"*1Ne1kG6c+IY@$^IVM.H&EXe4NY-g`o~>endstream
 endobj
 xref
-0 8
+0 13
 0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000121 00000 n 
-0000000191 00000 n 
-0000002281 00000 n 
-0000002407 00000 n 
-0000004615 00000 n 
+0000000061 00000 n 
+0000000102 00000 n 
+0000000209 00000 n 
+0000000321 00000 n 
+0000000515 00000 n 
+0000000709 00000 n 
+0000000903 00000 n 
+0000000971 00000 n 
+0000001251 00000 n 
+0000001322 00000 n 
+0000003696 00000 n 
+0000006048 00000 n 
 trailer
-<< /Size 8 /Root 1 0 R >>
+<<
+/ID 
+[<4d66965c7e06724339abdcdb40ea4f37><4d66965c7e06724339abdcdb40ea4f37>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 8 0 R
+/Root 7 0 R
+/Size 13
+>>
 startxref
-4741
+7212
 %%EOF

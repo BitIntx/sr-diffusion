@@ -3,104 +3,256 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{hyperref}
 \usepackage{booktabs}
+\usepackage{amsmath}
 
 \title{Vision-Only Latent Diffusion Super-Resolution without T2I Pretraining}
 \author{sr-diffusion contributors}
-\date{Work-in-progress technical report}
+\date{Completed-experiment snapshot through Stage 2 XL candidate selection}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-This report describes a work-in-progress x4 super-resolution project. The goal
-is to train a vision-only latent diffusion SR model directly, without importing a
-pretrained text-to-image diffusion backbone. The current implementation is in
-Stage 1: learning a factor-4 VAE/autoencoder on 512px HR crops so later stages
-can train in latent space.
+This report summarizes a work-in-progress x4 super-resolution system trained
+directly in vision space, without importing a pretrained text-to-image diffusion
+backbone. The completed pipeline consists of a factor-4 VAE, deterministic
+LR-to-HR-latent pretraining, conditional latent diffusion, and
+condition-start fine-tuning on a 103k-image photo split. The latest completed
+XL-stage result is a 500M-class condition encoder trained with a stronger
+degradation curriculum. Its Stage 2 candidates were compared on the same fixed
+validation images, and the 72k-step checkpoint was selected for the next
+diffusion stage.
 \end{abstract}
 
 \section{Objective}
 
-The target task is x4 restoration from low-resolution inputs:
+The target task is single-image x4 restoration:
 \[
-128 \times 128 \rightarrow 512 \times 512
+128 \times 128 \rightarrow 512 \times 512.
 \]
-with a later extension to
+A later extension targets
 \[
 192 \times 192 \rightarrow 768 \times 768.
 \]
-The intended model should support photo and anime/illustration domains in one
-model through explicit domain conditioning.
+The design goal is a practical latent diffusion SR model trained from project
+checkpoints only. The system intentionally avoids Stable Diffusion, T2I
+backbones, text conditioning, and imported generative priors from pretrained
+diffusion models.
 
-\section{Planned Method}
+\section{Architecture}
 
-The planned pipeline is:
+The model is split into three trainable parts:
 \[
-\mathrm{HR\ image} \rightarrow \mathrm{VAE} \rightarrow \mathrm{HR\ latent}.
+\mathrm{HR\ image} \rightarrow \mathrm{VAE} \rightarrow \mathrm{HR\ latent},
 \]
-During SR training, a degraded LR image is encoded by a condition encoder. A
-conditional diffusion U-Net then denoises HR latents using LR features, timestep
-embeddings, and domain embeddings. The VAE decoder maps the final latent back to
-the x4 HR output.
+\[
+\mathrm{LR\ image} \rightarrow \mathrm{condition\ encoder} \rightarrow
+\mathrm{condition\ latent},
+\]
+\[
+\mathrm{noisy\ HR\ latent}, \mathrm{condition\ latent}, t,
+\mathrm{domain\ id} \rightarrow \mathrm{conditional\ U\mbox{-}Net}.
+\]
+The VAE decoder maps the denoised latent back to the 512px HR output. Domain IDs
+are implemented for photo and anime/illustration data, although the completed
+large-scale runs reported here use the photo split.
 
-\section{Current Implementation}
+\section{Training Stages}
 
-The repository currently implements the Stage 0--1 foundation:
+The project is organized as staged training rather than a single end-to-end run:
+
+\begin{enumerate}
+  \item Stage 1 trains the factor-4 VAE on HR crops.
+  \item Stage 2 trains a deterministic condition encoder to predict HR latents
+        from degraded LR inputs.
+  \item Stage 3 trains a conditional diffusion U-Net in latent space.
+  \item Stage 4 fine-tunes diffusion from the condition latent at low timesteps.
+  \item XL variants widen and deepen the condition encoder or diffusion U-Net
+        while using partial checkpoint initialization where tensor shapes match.
+\end{enumerate}
+
+\section{Completed Implementation}
+
+The repository currently includes:
 \begin{itemize}
-  \item manifest-based photo/anime dataset loading,
-  \item on-the-fly x4 degradation,
-  \item factor-4 AutoencoderKL,
-  \item PyTorch/ROCm training with bf16 autocast,
-  \item W\&B online logging,
-  \item fixed validation sample logging for LR, GT, and HR reconstruction,
-  \item validation metrics for loss, reconstruction, KL, MSE, and PSNR.
+  \item manifest-based dataset loading with explicit domain IDs,
+  \item on-the-fly x4 degradation pipelines,
+  \item a factor-4 AutoencoderKL with 16 latent channels,
+  \item deterministic LR-to-HR-latent pretraining,
+  \item conditional latent diffusion with timestep and domain conditioning,
+  \item DDIM/img2img sampling for validation,
+  \item condition-start Stage 4 fine-tuning,
+  \item bf16 CUDA/ROCm training paths,
+  \item W\&B logging, fixed validation samples, checkpoint evaluation, and
+        recovery scripts for VM migration,
+  \item partial checkpoint initialization for widened/deepened models.
 \end{itemize}
+
+\section{Data and Degradation}
+
+The large-scale photo runs use a 103,450-image training split and a fixed
+100-image validation split. HR crops are 512px and LR inputs are 128px. The
+original photo degradation was extended with stronger blur, noise, compression,
+ringing, color shift, and banding variants. The latest XL condition encoder uses
+the \texttt{photo\_v3\_noise\_mix} degradation preset to emphasize
+denoise/sharpening behavior.
 
 \begin{table}[h]
 \centering
 \begin{tabular}{ll}
 \toprule
-Item & Current value \\
+Item & Value \\
 \midrule
-Training data & 10,000 photo images \\
-Validation data & 100 photo images \\
-Input crop & 512px HR \\
-Latent size & 128px, 16 channels \\
-Batch size & 16 \\
-Max steps & 100,000 \\
-Eval cadence & Every 1,000 steps \\
-Sample cadence & Every 500 steps \\
+Task & x4 SR, 128px LR to 512px HR \\
+Active large-scale domain & Photo \\
+Train split & 103,450 images \\
+Validation split & 100 fixed images \\
+VAE latent & 128px, 16 channels \\
+Primary dtype & bf16 \\
+Latest completed XL degradation & \texttt{photo\_v3\_noise\_mix} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Evaluation}
+\section{Completed Results}
 
-Current evaluation is for the VAE only:
+\subsection{Stage 1 VAE}
+
+The selected Stage 1 VAE checkpoint is
+\texttt{autoencoder\_photo10k\_b16\_eval\_online/checkpoints/best\_eval\_recon.pt}.
+It was selected at the 50k-step checkpoint with:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+Metric & Value \\
+\midrule
+eval/recon & 0.01198 \\
+eval/kl & 9.38684 \\
+eval/psnr & 40.19 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Photo100k Baseline Stages}
+
+The first photo100k scale-up completed deterministic latent pretraining,
+conditional diffusion, and condition-start fine-tuning.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+Stage & Run & Finished step & Selected result \\
+\midrule
+Stage 2 & \texttt{latent\_pretrain\_photo100k\_b64} & 30k &
+best latent loss 0.21230 \\
+Stage 3 & \texttt{diffusion\_photo100k\_b32} & 60k &
+decoded PSNR 24.56 diagnostic \\
+Stage 4 & \texttt{diffusion\_photo100k\_b32\_stage4\_condition} & 5k &
+sampled val100 PSNR 25.4072 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On the sampled validation comparison, the Stage 4 condition-start checkpoint
+slightly improved the Stage 3 checkpoint:
 \[
-\mathrm{HR} \rightarrow \mathrm{encode} \rightarrow \mathrm{decode}
-\rightarrow \mathrm{reconstruction}.
+25.4072 - 25.3745 = +0.0327\ \mathrm{PSNR}.
 \]
-The validation set is fixed, and visual samples are also fixed so that W\&B
-comparisons show real progress over time rather than different random crops.
 
-\section{Roadmap}
+\subsection{Photo100k v2 Denoise/Sharpening Stages}
 
-\begin{enumerate}
-  \item Stage 1: finish and select the VAE checkpoint.
-  \item Stage 2: train deterministic LR-to-HR-latent pretraining.
-  \item Stage 3: train conditional latent diffusion for SR.
-  \item Stage 4: add perceptual/GAN fine-tuning if needed.
-  \item Stage 5: distill to fewer inference steps.
-  \item Stage 6: evaluate checkpoints with fixed A/B preference tests.
-\end{enumerate}
+The \texttt{photo\_v2} degradation curriculum produced lower absolute PSNR than
+the earlier degradation because the task is stronger, but Stage 4 improved both
+the Stage 3 v2 model and bicubic baseline on the sampled validation set.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+Comparison & Sampled val100 PSNR \\
+\midrule
+Bicubic baseline & 22.4103 \\
+Stage 3 v2 SR & 22.6699 \\
+Stage 4 v2 SR & 22.8426 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Stage 4 v2 improved over Stage 3 v2 by +0.1727 PSNR and beat bicubic by +0.4323
+PSNR on the sampled validation set, with 81 wins and 19 losses in per-image
+comparison. Remaining artifacts included occasional color/contrast overshoot and
+small cyan/green sampling artifacts.
+
+\subsection{Stage 2 XL Condition Encoder}
+
+A smaller \texttt{photo\_v3\_noise\_mix} Stage 2 run was stopped at step 12,700
+after the validation latent loss plateaued near 0.282. The XL condition encoder
+then completed 80k steps with a larger 500M-class full-path target. Its main
+checkpoints were:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+Checkpoint & Step & eval/latent\_loss & eval/decoded\_psnr \\
+\midrule
+Best latent & 66k & 0.27230 & 21.38 \\
+Best PSNR proxy & 72k & 0.27940 & 21.52 \\
+Final/latest & 80k & 0.27592 & 21.51 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The three Stage 2 XL candidates were then compared on the same 100 validation
+images by decoding condition-only outputs through the selected VAE. This
+comparison used fixed samples, fixed seed, and the same
+\texttt{latent\_pretrain\_photo100k\_v3\_noise\_xl.yaml} configuration.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrr}
+\toprule
+Candidate & Mean decoded MSE & Mean decoded PSNR \\
+\midrule
+Best latent, step 66k & 0.029092 & 22.8017 \\
+Latest, step 80k & 0.028277 & 22.8901 \\
+Best PSNR proxy, step 72k & 0.028161 & 22.9029 \\
+Bicubic reference & -- & 22.3599 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The 72k-step checkpoint had the best decoded condition-only PSNR and the lowest
+decoded MSE, so it was selected as the condition encoder for the next XL
+diffusion experiment.
+
+\section{Current Scope of This Report}
+
+This document records completed experiments only. XL diffusion training and any
+metrics from runs still in progress are intentionally excluded until those runs
+finish and their checkpoints can be compared on fixed validation samples.
 
 \section{Limitations}
 
-This is not yet a complete SR diffusion model. The current training run only
-learns the VAE reconstruction model. Anime/illustration data has not yet been
-added to the active 10k training set, and no claim is made that this is a novel
-published method. This is a practical engineering report for an active
-experiment.
+This is an engineering report for an active experiment, not a claim of a final
+published method. The large-scale completed results are photo-domain only, while
+anime/illustration domain conditioning remains implemented but not yet validated
+at the same scale. The reported sampled PSNR values are useful for internal
+checkpoint comparison, but they are not a full benchmark suite against external
+SR methods.
+
+\begin{thebibliography}{9}
+\bibitem{rombach2022latent}
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bjorn
+Ommer. High-Resolution Image Synthesis with Latent Diffusion Models. CVPR,
+2022.
+
+\bibitem{saharia2022sr3}
+Chitwan Saharia et al. Image Super-Resolution via Iterative Refinement. IEEE
+TPAMI, 2022.
+\end{thebibliography}
 
 \end{document}
