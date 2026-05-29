@@ -1,0 +1,49 @@
+{
+  "best_decoded_psnr": {
+    "eval/decoded_mse": 0.018126084357500075,
+    "eval/decoded_psnr": 23.43755994490881,
+    "eval/noise_mse": 0.00821230050176382,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.09724276781082153,
+    "step": 19000
+  },
+  "best_noise_mse": {
+    "eval/decoded_mse": 0.018126084357500075,
+    "eval/decoded_psnr": 23.43755994490881,
+    "eval/noise_mse": 0.00821230050176382,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.09724276781082153,
+    "step": 19000
+  },
+  "checkpoint": "checkpoints/stage3_photo100k_v2_b32_best_eval_noise.pt",
+  "condition_encoder": "checkpoints/stage2_photo100k_v2_b64_best_eval_latent.pt",
+  "dataset": "manifest_photo100k.csv",
+  "degradation_preset": "photo_v2",
+  "final": {
+    "eval/decoded_mse": 0.018136419355869293,
+    "eval/decoded_psnr": 23.435084422027522,
+    "eval/noise_mse": 0.00823758251965046,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.09751181840896607,
+    "step": 20000
+  },
+  "finished_step": 20000,
+  "initialized_from": "checkpoints/stage3_photo100k_b32_best_eval_noise.pt",
+  "run": "diffusion_photo100k_b32_v2",
+  "sampled_eval": {
+    "checkpoint": "/home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_v2/checkpoints/best_eval_noise.pt",
+    "checkpoint_step": 19000,
+    "config": "configs/diffusion_photo100k_b32_v2.yaml",
+    "eta": 0.0,
+    "init": "condition",
+    "limit": 100,
+    "mean_bicubic_psnr": 22.410346417149967,
+    "mean_psnr_delta": 0.259511047033417,
+    "mean_sr_psnr": 22.669857464183384,
+    "split": "val",
+    "start_timestep": null,
+    "steps": 32
+  },
+  "train_images": 103450,
+  "val_images": 100
+}

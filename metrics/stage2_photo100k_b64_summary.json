@@ -1,0 +1,32 @@
+{
+  "best_decoded_psnr": {
+    "eval/decoded_mse": 0.016191508397459985,
+    "eval/decoded_psnr": 23.927726819088395,
+    "eval/latent_loss": 0.2125462031364441,
+    "eval/latent_mse": 0.3713633298873901,
+    "eval/num_images": 100.0,
+    "step": 22000
+  },
+  "best_latent_loss": {
+    "eval/decoded_mse": 0.016376328319311143,
+    "eval/decoded_psnr": 23.878434546732812,
+    "eval/latent_loss": 0.21230137586593628,
+    "eval/latent_mse": 0.3715009069442749,
+    "eval/num_images": 100.0,
+    "step": 28000
+  },
+  "checkpoint": "checkpoints/stage2_photo100k_b64_best_eval_latent.pt",
+  "dataset": "manifest_photo100k.csv",
+  "final": {
+    "eval/decoded_mse": 0.016373177617788316,
+    "eval/decoded_psnr": 23.87927018211146,
+    "eval/latent_loss": 0.21267012119293213,
+    "eval/latent_mse": 0.3594083833694458,
+    "eval/num_images": 100.0,
+    "step": 30000
+  },
+  "finished_step": 30000,
+  "run": "latent_pretrain_photo100k_b64",
+  "train_images": 103450,
+  "val_images": 100
+}

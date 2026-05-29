@@ -1,0 +1,14 @@
+{
+  "checkpoint": "/home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_xl_stage4_condition_v3_edge_b16/checkpoints/best_eval_condition_decoded.pt",
+  "checkpoint_step": 4250,
+  "config": "configs/diffusion_photo100k_xl_stage4_condition_v3_edge_b16.yaml",
+  "eta": 0.0,
+  "init": "condition",
+  "limit": 100,
+  "mean_bicubic_psnr": 22.359857245132037,
+  "mean_psnr_delta": 0.7194754066784377,
+  "mean_sr_psnr": 23.079332651810475,
+  "split": "val",
+  "start_timestep": 50,
+  "steps": 32
+}

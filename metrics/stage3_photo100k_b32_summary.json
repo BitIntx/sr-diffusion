@@ -1,0 +1,42 @@
+{
+  "best_decoded_psnr": {
+    "eval/decoded_mse": 0.013977159261703492,
+    "eval/decoded_psnr": 24.566410775956555,
+    "eval/noise_mse": 0.006863808408379555,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.08128397762775422,
+    "step": 53000
+  },
+  "best_noise_mse": {
+    "eval/decoded_mse": 0.013995516449213027,
+    "eval/decoded_psnr": 24.560710623089136,
+    "eval/noise_mse": 0.006804447174072265,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.08051958203315734,
+    "step": 60000
+  },
+  "best_x0_mse": {
+    "eval/decoded_mse": 0.013995516449213027,
+    "eval/decoded_psnr": 24.560710623089136,
+    "eval/noise_mse": 0.006804447174072265,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.08051958203315734,
+    "step": 60000
+  },
+  "checkpoint": "checkpoints/stage3_photo100k_b32_best_eval_noise.pt",
+  "condition_encoder": "latent_pretrain_photo100k_b64/checkpoints/best_eval_latent.pt",
+  "dataset": "manifest_photo100k.csv",
+  "final": {
+    "eval/decoded_mse": 0.013995516449213027,
+    "eval/decoded_psnr": 24.560710623089136,
+    "eval/noise_mse": 0.006804447174072265,
+    "eval/num_images": 100.0,
+    "eval/x0_mse": 0.08051958203315734,
+    "step": 60000
+  },
+  "finished_step": 60000,
+  "initialized_from": "diffusion_photo10k_b32/checkpoints/best_eval_noise.pt",
+  "run": "diffusion_photo100k_b32",
+  "train_images": 103450,
+  "val_images": 100
+}

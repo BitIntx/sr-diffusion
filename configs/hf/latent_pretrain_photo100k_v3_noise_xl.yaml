@@ -1,0 +1,11 @@
+project:
+  name: latent_pretrain_photo100k_v3_noise_xl_hf
+
+model:
+  type: lr_to_latent_predictor
+  in_channels: 3
+  latent_channels: 16
+  base_channels: 256
+  num_blocks: 16
+  norm_groups: 32
+  num_domains: 2

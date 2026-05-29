@@ -7,7 +7,7 @@
 
 \title{Vision-Only Latent Diffusion Super-Resolution without T2I Pretraining}
 \author{sr-diffusion contributors}
-\date{Completed-experiment snapshot through Stage 2 XL candidate selection}
+\date{Completed-experiment snapshot through Stage 4 XL edge-loss training}
 
 \begin{document}
 \maketitle
@@ -18,10 +18,11 @@ directly in vision space, without importing a pretrained text-to-image diffusion
 backbone. The completed pipeline consists of a factor-4 VAE, deterministic
 LR-to-HR-latent pretraining, conditional latent diffusion, and
 condition-start fine-tuning on a 103k-image photo split. The latest completed
-XL-stage result is a 500M-class condition encoder trained with a stronger
-degradation curriculum. Its Stage 2 candidates were compared on the same fixed
-validation images, and the 72k-step checkpoint was selected for the next
-diffusion stage.
+XL-stage result uses a 500M-class full inference path: a wider Stage 2
+condition encoder trained with a stronger degradation curriculum and a deeper
+469.6M-parameter diffusion U-Net fine-tuned with decoded edge/highpass losses.
+On the current \texttt{photo\_v3\_noise\_mix} sampled validation setup, the
+Stage 4 XL edge-loss checkpoint improves over bicubic by +0.7195 dB PSNR.
 \end{abstract}
 
 \section{Objective}
@@ -85,7 +86,8 @@ The repository currently includes:
   \item bf16 CUDA/ROCm training paths,
   \item W\&B logging, fixed validation samples, checkpoint evaluation, and
         recovery scripts for VM migration,
-  \item partial checkpoint initialization for widened/deepened models.
+  \item partial checkpoint initialization for widened/deepened models,
+  \item PyTorch DDP diffusion training with single-GPU fallback.
 \end{itemize}
 
 \section{Data and Degradation}
@@ -201,7 +203,7 @@ Checkpoint & Step & eval/latent\_loss & eval/decoded\_psnr \\
 \midrule
 Best latent & 66k & 0.27230 & 21.38 \\
 Best PSNR proxy & 72k & 0.27940 & 21.52 \\
-Final/latest & 80k & 0.27592 & 21.51 \\
+Final/latest & 80k & 0.27593 & 21.51 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -215,25 +217,65 @@ comparison used fixed samples, fixed seed, and the same
 \centering
 \begin{tabular}{lrr}
 \toprule
-Candidate & Mean decoded MSE & Mean decoded PSNR \\
+Candidate & Latent MSE & Mean decoded PSNR \\
 \midrule
-Best latent, step 66k & 0.029092 & 22.8017 \\
-Latest, step 80k & 0.028277 & 22.8901 \\
-Best PSNR proxy, step 72k & 0.028161 & 22.9029 \\
-Bicubic reference & -- & 22.3599 \\
+Best latent, step 66k & 0.91770 & 21.3828 \\
+Best PSNR proxy, step 72k & 0.97295 & 21.5241 \\
+Latest, step 80k & 0.89609 & 21.5062 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The 72k-step checkpoint had the best decoded condition-only PSNR and the lowest
-decoded MSE, so it was selected as the condition encoder for the next XL
-diffusion experiment.
+The 72k-step checkpoint had the best decoded condition-only PSNR, so it was
+selected as the condition encoder for the next XL diffusion experiment.
 
-\section{Current Scope of This Report}
+\subsection{Stage 4 XL Edge-Loss Condition-Start}
 
-This document records completed experiments only. XL diffusion training and any
-metrics from runs still in progress are intentionally excluded until those runs
-finish and their checkpoints can be compared on fixed validation samples.
+The first Stage 4 XL run was then launched from the selected 72k-step Stage 2
+XL condition encoder. The diffusion U-Net uses \texttt{base\_channels=128},
+\texttt{channel\_multipliers=[1,2,4,8]}, six residual blocks per scale, and
+eight attention heads. Shape-compatible tensors were partially initialized from
+the smaller Stage 4 v2 checkpoint. The loss combines a small noise term,
+latent \(\hat{x}_0\), decoded Charbonnier reconstruction, Sobel edge loss, and a
+highpass decoded loss.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Item & Value \\
+\midrule
+Config & \texttt{diffusion\_photo100k\_xl\_stage4\_condition\_v3\_edge\_b16.yaml} \\
+Run & \texttt{diffusion\_photo100k\_xl\_stage4\_condition\_v3\_edge\_b16} \\
+Finished step & 5000 \\
+Selected checkpoint & step 4250, best \texttt{eval/decoded\_mse} \\
+Training eval decoded PSNR & 21.9872 \\
+W\&B run & \url{https://wandb.ai/jwheo/sr-diffusion/runs/nog04fwr} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The selected checkpoint was sampled on the fixed 100-image validation split
+with condition initialization, 32 DDIM steps, and start timestep 50:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+Metric & Value \\
+\midrule
+Mean bicubic PSNR & 22.3599 \\
+Mean SR PSNR & 23.0793 \\
+Mean PSNR delta & +0.7195 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Qualitatively, the XL Stage 4 checkpoint reduces noise and color contamination
+relative to the degraded LR/bicubic path. It is not yet a final restoration
+model: outputs remain visibly softer than the ground truth on fine textures.
+The next low-cost ablation is to resample the same checkpoint with a lower start
+timestep, such as 25, to test whether less denoising preserves more detail.
 
 \section{Limitations}
 

@@ -54,10 +54,19 @@ PHOTO100K_XL_CANDIDATE_FILES = [
     "checkpoints/stage2_photo100k_v3_noise_xl_b64_latest.pt",
 ]
 
+PHOTO100K_XL_STAGE4_EDGE_FILES = [
+    *PHOTO100K_XL_CANDIDATE_FILES,
+    "checkpoints/stage4_photo100k_xl_edge_b16_best_eval_condition_decoded.pt",
+    "configs/diffusion_photo100k_xl_stage4_condition_v3_edge_b16.yaml",
+    "metrics/stage4_photo100k_xl_edge_b16_val100_t50_32step_summary.json",
+    "samples/stage4_photo100k_xl_edge_b16_val100_t50_32step_grid_lr_bicubic_sr_gt.png",
+]
+
 PRESETS = {
     "prototype": PROTOTYPE_FILES,
     "photo100k": PHOTO100K_FILES,
     "photo100k_xl_candidates": PHOTO100K_XL_CANDIDATE_FILES,
+    "photo100k_xl_stage4_edge": PHOTO100K_XL_STAGE4_EDGE_FILES,
 }
 
 
@@ -73,7 +82,8 @@ def parse_args() -> argparse.Namespace:
         default="prototype",
         help=(
             "Artifact set to download. 'photo100k' includes selected handoff checkpoints; "
-            "'photo100k_xl_candidates' also includes Stage 2 XL candidate condition encoders."
+            "'photo100k_xl_candidates' also includes Stage 2 XL candidate condition encoders; "
+            "'photo100k_xl_stage4_edge' includes the latest XL Stage 4 edge-loss checkpoint and eval artifacts."
         ),
     )
     parser.add_argument(

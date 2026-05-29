@@ -6,7 +6,8 @@
 [![Checkpoint License](https://img.shields.io/badge/checkpoints-CC_BY--NC_4.0-orange)](CHECKPOINT_LICENSE.md)
 
 Vision-only x4 latent diffusion super-resolution experiments.
-Report source: [paper/main.tex](paper/main.tex).
+Report source: [paper/main.tex](paper/main.tex), with a plain Markdown snapshot
+in [paper/TECHNICAL_REPORT.md](paper/TECHNICAL_REPORT.md).
 
 This is a public source-available, non-commercial research project. The goal is
 to train an SR model directly, without using a pretrained text-to-image
@@ -94,9 +95,35 @@ XL Stage 4 condition-start:   configs/diffusion_photo100k_xl_stage4_condition_v3
 XL full inference params:     509.658M
 ```
 
-Stage 4 XL has not been started yet. The next step is to compare the Stage 2
-XL candidate condition encoders, then run the 469.6M U-Net with partial init
-from Stage 4 v2.
+The Stage 2 XL candidates were compared on the same 100 validation images using
+condition-only decoded outputs. The step 72000 checkpoint had the best decoded
+PSNR proxy and was selected for Stage 4 XL.
+
+```text
+XL Stage 2 candidate comparison:
+  best_eval_latent step 66000: decoded_psnr 21.3828
+  step_0072000 step 72000:     decoded_psnr 21.5241
+  latest step 80000:           decoded_psnr 21.5062
+```
+
+The first Stage 4 XL condition-start run is now complete. It uses the 469.6M
+U-Net path, the Stage 2 XL step 72000 condition encoder, partial initialization
+from Stage 4 v2, and edge/highpass decoded losses for stronger restoration.
+
+```text
+XL Stage 4 edge config: configs/diffusion_photo100k_xl_stage4_condition_v3_edge_b16.yaml
+XL Stage 4 edge run:    diffusion_photo100k_xl_stage4_condition_v3_edge_b16
+finished step:          5000
+selected checkpoint:    step 4250, best eval/decoded_mse
+training eval proxy:    decoded_psnr 21.9872
+sampled val100:         SR 23.0793 PSNR, bicubic 22.3599 PSNR, delta +0.7195
+W&B:                    https://wandb.ai/jwheo/sr-diffusion/runs/nog04fwr
+```
+
+This is better than the previous v3-noise XL condition-only path and beats the
+bicubic baseline on the current v3 validation setup, but it is still an active
+research checkpoint: noise/color cleanup improved, while fine texture recovery
+remains softer than the ground truth.
 
 For VM migration and continuation context, read:
 
@@ -134,6 +161,8 @@ Implemented:
   denoise/sharpening experiments.
 - Partial checkpoint initialization for widened/deepened Stage 2 and diffusion
   models via `--partial-init`.
+- Multi-GPU diffusion training through PyTorch DDP, with single-GPU fallback
+  when not launched through `torchrun`.
 
 Stage 1 training config:
 
@@ -442,8 +471,8 @@ Upload only selected checkpoints/configs/metrics, not raw datasets. See
 The public Hugging Face prototype can be downloaded and run from a fresh clone.
 The default inference config still points at the smaller 10k Stage 4
 condition-start checkpoint for faster setup. The Colab notebook now also lets
-you select the larger photo100k Stage 4 checkpoint or the experimental
-photo100k `photo_v2` Stage 3 checkpoint for denoise/sharpening review.
+you select the larger photo100k Stage 4 checkpoints, including the latest XL
+edge-loss Stage 4 checkpoint for denoise/sharpening review.
 
 For a click-to-run demo, open the Colab notebook:
 
@@ -470,6 +499,12 @@ Download the larger photo100k/v2 artifact set:
 
 ```bash
 python scripts/download_hf_checkpoints.py --preset photo100k
+```
+
+Download the latest XL Stage 4 edge-loss artifact set:
+
+```bash
+python scripts/download_hf_checkpoints.py --preset photo100k_xl_stage4_edge
 ```
 
 Run x4 SR from an LR image. The default HF config expects a 128x128 LR crop and
@@ -531,6 +566,16 @@ python infer_diffusion.py \
   --config configs/hf/diffusion_photo100k_stage4_condition_v2.yaml \
   --input-lr /path/to/lr_128.png \
   --output-dir outputs/photo100k_v2_stage4
+```
+
+For the latest experimental XL `photo_v3_noise_mix` Stage 4 edge-loss
+checkpoint:
+
+```bash
+python infer_diffusion.py \
+  --config configs/hf/diffusion_photo100k_xl_stage4_condition_v3_edge_b16.yaml \
+  --input-lr /path/to/lr_128.png \
+  --output-dir outputs/photo100k_xl_edge_b16
 ```
 
 For the earlier photo100k `photo_v2` Stage 3 checkpoint:
@@ -645,13 +690,14 @@ After Stage 2 photo100k finishes, run the photo100k Stage 3 config:
   --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo10k_b32/checkpoints/best_eval_noise.pt
 ```
 
-After comparing the XL Stage 2 condition encoder candidates, run the 500M-class
-condition-start U-Net. It can reuse shape-compatible tensors from the smaller
-Stage 4 v2 checkpoint. This has not been started yet:
+The completed 500M-class Stage 4 XL edge-loss run used the command below. It
+reuses shape-compatible tensors from the smaller Stage 4 v2 checkpoint through
+partial initialization. Launch with `torchrun` for two GPUs, or run the same
+script directly for single-GPU fallback:
 
 ```bash
-/home/jwheojjang/venvs/cuda/bin/python train_diffusion.py \
-  --config configs/diffusion_photo100k_xl_stage4_condition_v3.yaml \
+torchrun --standalone --nproc_per_node=2 train_diffusion.py \
+  --config configs/diffusion_photo100k_xl_stage4_condition_v3_edge_b16.yaml \
   --init-checkpoint /home/jwheojjang/scratch/sr-diffusion/runs/diffusion_photo100k_b32_stage4_condition_v2/checkpoints/best_eval_condition_decoded.pt \
   --partial-init
 ```
@@ -673,6 +719,12 @@ Watch GPU usage:
 
 ```bash
 watch -n 1 rocm-smi --showuse --showmemuse --showtemp --showpower
+```
+
+On CUDA systems:
+
+```bash
+watch -n 1 nvidia-smi
 ```
 
 Attach to the tmux session:
@@ -827,6 +879,11 @@ Stage 4: perceptual / GAN fine-tune
   `--start-timestep 25`.
 - Use carefully, because later perceptual/GAN tuning can improve apparent
   sharpness while hurting fidelity.
+- The first XL Stage 4 edge-loss run is complete. It improves the current v3
+  sampled validation result over bicubic by +0.7195 dB, but outputs are still
+  softer than GT on fine textures. The next cheap ablation is sampled eval with
+  lower `--start-timestep 25` on the same checkpoint before committing to a
+  longer continuation run.
 
 Run the Stage 4-lite low-timestep fine-tune:
 

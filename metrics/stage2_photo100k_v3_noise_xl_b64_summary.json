@@ -1,0 +1,37 @@
+{
+  "best_decoded_psnr": {
+    "decoded_mse": 0.028163226246833803,
+    "decoded_psnr": 21.523775872733694,
+    "latent_loss": 0.27940222263336184,
+    "latent_mse": 0.9729015684127807,
+    "num_images": 100,
+    "step": 72000
+  },
+  "best_latent": {
+    "decoded_mse": 0.029094334542751312,
+    "decoded_psnr": 21.382515630419128,
+    "latent_loss": 0.2722978699207306,
+    "latent_mse": 0.9177197647094727,
+    "num_images": 100,
+    "step": 66000
+  },
+  "checkpoint": "checkpoints/stage2_photo100k_v3_noise_xl_b64_best_eval_latent.pt",
+  "comparison": {
+    "decoded_psnr_delta_vs_small_v3": 0.07987815299853551,
+    "latent_loss_delta_vs_small_v3": -0.009573696851730373,
+    "small_v3_best_decoded_psnr": 21.302637477420593,
+    "small_v3_best_latent_loss": 0.28187156677246095
+  },
+  "config": "configs/latent_pretrain_photo100k_v3_noise_xl.yaml",
+  "final_eval": {
+    "decoded_mse": 0.0282740181684494,
+    "decoded_psnr": 21.506724585944152,
+    "latent_loss": 0.2759156239032745,
+    "latent_mse": 0.8960624599456787,
+    "num_images": 100,
+    "step": 80000
+  },
+  "finished_step": 80000,
+  "notes": "XL condition encoder completed 80k steps on photo_v3_noise_mix. Best latent checkpoint is step 66000; final decoded PSNR proxy is highest at step 80000 among late checkpoints but best_psnr overall is step 72000.",
+  "run": "latent_pretrain_photo100k_v3_noise_xl_b64"
+}

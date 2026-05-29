@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -10,9 +11,12 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel
 from torchvision.utils import save_image
 
 ROOT = Path(__file__).resolve().parent
@@ -55,6 +59,52 @@ def parse_args() -> argparse.Namespace:
         help="When --init-condition-encoder is set, load only shape-compatible condition encoder tensors.",
     )
     return parser.parse_args()
+
+
+def distributed_is_available() -> bool:
+    return dist.is_available() and "RANK" in os.environ and "WORLD_SIZE" in os.environ
+
+
+def setup_distributed() -> tuple[bool, int, int, int]:
+    if not distributed_is_available():
+        return False, 0, 1, 0
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+    backend = "nccl" if torch.cuda.is_available() else "gloo"
+    if backend == "nccl":
+        dist.init_process_group(backend=backend, device_id=torch.device(f"cuda:{local_rank}"))
+    else:
+        dist.init_process_group(backend=backend)
+    return True, rank, world_size, local_rank
+
+
+def cleanup_distributed(enabled: bool) -> None:
+    if enabled and dist.is_initialized():
+        dist.destroy_process_group()
+
+
+def is_main_process(rank: int) -> bool:
+    return rank == 0
+
+
+def barrier(enabled: bool) -> None:
+    if enabled and dist.is_initialized():
+        if torch.cuda.is_available():
+            dist.barrier(device_ids=[torch.cuda.current_device()])
+        else:
+            dist.barrier()
+
+
+def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
+    return model.module if isinstance(model, DistributedDataParallel) else model
+
+
+def print_main(message: str, rank: int) -> None:
+    if is_main_process(rank):
+        print(message)
 
 
 def normalize_image(x: torch.Tensor) -> torch.Tensor:
@@ -199,8 +249,8 @@ def save_checkpoint(
     torch.save(
         {
             "step": step,
-            "model": model.state_dict(),
-            "condition_encoder": condition_encoder.state_dict(),
+            "model": unwrap_model(model).state_dict(),
+            "condition_encoder": unwrap_model(condition_encoder).state_dict(),
             "optimizer": optimizer.state_dict(),
             "config": clean_config(config),
         },
@@ -362,44 +412,64 @@ def evaluate(
 
 def main() -> None:
     args = parse_args()
+    distributed, rank, world_size, local_rank = setup_distributed()
     config = load_config(args.config)
     seed = int(config.get("seed", 0))
-    seed_everything(seed)
+    seed_everything(seed + rank)
 
     output_dir = Path(config["project"]["output_dir"])
     checkpoints_dir = output_dir / "checkpoints"
     samples_dir = output_dir / "samples"
     eval_dir = output_dir / "eval"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    samples_dir.mkdir(parents=True, exist_ok=True)
-    eval_dir.mkdir(parents=True, exist_ok=True)
-    save_config(config, output_dir / "config.yaml")
+    if is_main_process(rank):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        samples_dir.mkdir(parents=True, exist_ok=True)
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        save_config(config, output_dir / "config.yaml")
+    barrier(distributed)
 
     train_cfg = config["train"]
-    device = get_device(train_cfg.get("device", "auto"))
+    device = torch.device(f"cuda:{local_rank}") if distributed and torch.cuda.is_available() else get_device(train_cfg.get("device", "auto"))
     dtype_name = train_cfg.get("dtype", "bf16")
-    print(f"device={device} dtype={dtype_name}")
+    print_main(
+        f"device={device} dtype={dtype_name} distributed={distributed} world_size={world_size}",
+        rank,
+    )
 
     train_dataset = make_dataset(config, split=config["data"].get("split", "train"), seed=seed)
     generator = torch.Generator()
     generator.manual_seed(seed)
+    train_sampler = (
+        DistributedSampler(
+            train_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+            seed=seed,
+            drop_last=True,
+        )
+        if distributed
+        else None
+    )
     train_loader = DataLoader(
         train_dataset,
         batch_size=int(train_cfg.get("batch_size", 1)),
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         num_workers=int(config["data"].get("num_workers", 0)),
         pin_memory=device.type == "cuda",
         worker_init_fn=seed_worker,
         generator=generator,
         drop_last=True,
     )
-    fixed_sample_batch = make_fixed_sample_batch(config, seed=seed)
-    if fixed_sample_batch is not None:
-        print(
+    fixed_sample_batch = make_fixed_sample_batch(config, seed=seed) if is_main_process(rank) else None
+    if fixed_sample_batch is not None and is_main_process(rank):
+        print_main(
             "sample_logging="
             f"split={fixed_sample_batch['split']} "
             f"indices={fixed_sample_batch['indices']} "
-            f"count={len(fixed_sample_batch['path'])}"
+            f"count={len(fixed_sample_batch['path'])}",
+            rank,
         )
 
     eval_cfg = config.get("eval", {})
@@ -411,7 +481,7 @@ def main() -> None:
     diffusion_cfg = config.get("diffusion", {})
     train_init_mode = str(diffusion_cfg.get("train_init", "target"))
     eval_init_mode = str(eval_cfg.get("init", "target"))
-    if eval_enabled:
+    if eval_enabled and is_main_process(rank):
         eval_dataset = make_dataset(config, split=str(eval_cfg.get("split", "val")), seed=seed, deterministic=True)
         limit = int(eval_cfg.get("limit", 0))
         if limit > 0 and limit < len(eval_dataset):
@@ -426,20 +496,21 @@ def main() -> None:
             pin_memory=device.type == "cuda",
             drop_last=False,
         )
-        print(
+        print_main(
             "eval="
             f"split={eval_cfg.get('split', 'val')} "
             f"limit={eval_cfg.get('limit', 0)} "
             f"batch_size={eval_cfg.get('batch_size', train_cfg.get('batch_size', 1))} "
             f"timestep={eval_timestep} "
-            f"init={eval_init_mode}"
+            f"init={eval_init_mode}",
+            rank,
         )
 
     vae = load_autoencoder(config, device=device)
     condition_encoder, train_condition_encoder = load_condition_encoder(config, device=device)
     model = ConditionalUNet.from_config(config["model"]).to(device)
     scheduler = NoiseScheduler.from_config(diffusion_cfg)
-    print(f"diffusion_timesteps={scheduler.num_train_timesteps} train_init={train_init_mode}")
+    print_main(f"diffusion_timesteps={scheduler.num_train_timesteps} train_init={train_init_mode}", rank)
 
     parameters = list(model.parameters())
     if train_condition_encoder:
@@ -453,7 +524,7 @@ def main() -> None:
     start_step = 0
     if args.resume:
         start_step = load_checkpoint(args.resume, model, condition_encoder, optimizer, device)
-        print(f"resumed step={start_step}")
+        print_main(f"resumed step={start_step}", rank)
     elif args.init_checkpoint:
         init_step = load_model_weights(
             args.init_checkpoint,
@@ -464,12 +535,21 @@ def main() -> None:
             partial=bool(args.partial_init),
             partial_condition_encoder=bool(args.partial_init_condition_encoder),
         )
-        print(
+        print_main(
             f"initialized_from={args.init_checkpoint} source_step={init_step} "
             f"partial_init={bool(args.partial_init)} "
             f"loaded_init_condition_encoder={bool(args.init_condition_encoder)} "
-            f"partial_init_condition_encoder={bool(args.partial_init_condition_encoder)}"
+            f"partial_init_condition_encoder={bool(args.partial_init_condition_encoder)}",
+            rank,
         )
+
+    if distributed:
+        model = DistributedDataParallel(model, device_ids=[local_rank] if device.type == "cuda" else None)
+        if train_condition_encoder:
+            condition_encoder = DistributedDataParallel(
+                condition_encoder,
+                device_ids=[local_rank] if device.type == "cuda" else None,
+            )
 
     max_steps = int(args.limit_steps or train_cfg.get("max_steps", 1000))
     log_every = int(train_cfg.get("log_every", 50))
@@ -487,13 +567,15 @@ def main() -> None:
     best_mode = str(eval_cfg.get("best_mode", "min"))
     best_checkpoint = str(eval_cfg.get("best_checkpoint", "best_eval_noise.pt"))
 
-    run = init_wandb(config, output_dir, model)
+    run = init_wandb(config, output_dir, unwrap_model(model)) if is_main_process(rank) else None
     wandb_log(
         run,
         {
             "dataset/num_images": len(train_dataset),
             "train/batch_size": int(train_cfg.get("batch_size", 1)),
             "train/grad_accum_steps": grad_accum_steps,
+            "train/world_size": world_size,
+            "train/effective_batch_size": int(train_cfg.get("batch_size", 1)) * grad_accum_steps * world_size,
         },
         step=start_step,
     )
@@ -505,72 +587,82 @@ def main() -> None:
     last_log = time.time()
     last_log_step = step
     optimizer.zero_grad(set_to_none=True)
+    epoch = 0
 
     while step < max_steps:
+        if train_sampler is not None:
+            train_sampler.set_epoch(epoch)
         for batch in train_loader:
             step += 1
             hr = batch["hr"].to(device, non_blocking=True)
             lr = batch["lr"].to(device, non_blocking=True)
             domain_id = batch["domain_id"].to(device, non_blocking=True)
 
-            with autocast_context(device, dtype_name):
-                target_latent, condition = make_latents(
-                    vae, condition_encoder, hr, lr, domain_id, dtype_name, train_condition_encoder
-                )
-                noise = torch.randn_like(target_latent)
-                timesteps = sample_train_timesteps(
-                    scheduler,
-                    int(target_latent.shape[0]),
-                    device=device,
-                    diffusion_config=diffusion_cfg,
-                )
-                noisy, target_noise = make_diffusion_inputs(
-                    scheduler, target_latent, condition, noise, timesteps, train_init_mode
-                )
-                predicted_noise = model(noisy, timesteps, condition, domain_id)
-                noise_loss = F.mse_loss(predicted_noise, target_noise)
-                needs_predicted_x0 = (
-                    x0_loss_weight > 0.0
-                    or decoded_loss_weight > 0.0
-                    or edge_loss_weight > 0.0
-                    or highpass_loss_weight > 0.0
-                )
-                if needs_predicted_x0:
-                    predicted_x0 = scheduler.predict_x0_from_noise(noisy, timesteps, predicted_noise)
-                else:
-                    predicted_x0 = None
-                if x0_loss_weight > 0.0 and predicted_x0 is not None:
-                    x0_loss = F.mse_loss(predicted_x0, target_latent)
-                else:
-                    x0_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
-                if (
-                    (decoded_loss_weight > 0.0 or edge_loss_weight > 0.0 or highpass_loss_weight > 0.0)
-                    and predicted_x0 is not None
-                ):
-                    decoded = vae.decode(predicted_x0)
-                    target_image = normalize_image(hr)
-                    decoded_loss = charbonnier_loss(decoded, target_image, eps=charbonnier_eps)
-                    edge_loss = sobel_edge_loss(decoded, target_image, eps=charbonnier_eps)
-                    highpass_loss = laplacian_loss(decoded, target_image, eps=charbonnier_eps)
-                else:
-                    decoded_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
-                    edge_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
-                    highpass_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
-                loss = (
-                    noise_loss_weight * noise_loss
-                    + x0_loss_weight * x0_loss
-                    + decoded_loss_weight * decoded_loss
-                    + edge_loss_weight * edge_loss
-                    + highpass_loss_weight * highpass_loss
-                )
-                scaled_loss = loss / grad_accum_steps
+            sync_gradients = step % grad_accum_steps == 0
+            sync_context = (
+                model.no_sync()
+                if distributed and isinstance(model, DistributedDataParallel) and not sync_gradients
+                else contextlib.nullcontext()
+            )
+            with sync_context:
+                with autocast_context(device, dtype_name):
+                    target_latent, condition = make_latents(
+                        vae, condition_encoder, hr, lr, domain_id, dtype_name, train_condition_encoder
+                    )
+                    noise = torch.randn_like(target_latent)
+                    timesteps = sample_train_timesteps(
+                        scheduler,
+                        int(target_latent.shape[0]),
+                        device=device,
+                        diffusion_config=diffusion_cfg,
+                    )
+                    noisy, target_noise = make_diffusion_inputs(
+                        scheduler, target_latent, condition, noise, timesteps, train_init_mode
+                    )
+                    predicted_noise = model(noisy, timesteps, condition, domain_id)
+                    noise_loss = F.mse_loss(predicted_noise, target_noise)
+                    needs_predicted_x0 = (
+                        x0_loss_weight > 0.0
+                        or decoded_loss_weight > 0.0
+                        or edge_loss_weight > 0.0
+                        or highpass_loss_weight > 0.0
+                    )
+                    if needs_predicted_x0:
+                        predicted_x0 = scheduler.predict_x0_from_noise(noisy, timesteps, predicted_noise)
+                    else:
+                        predicted_x0 = None
+                    if x0_loss_weight > 0.0 and predicted_x0 is not None:
+                        x0_loss = F.mse_loss(predicted_x0, target_latent)
+                    else:
+                        x0_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                    if (
+                        (decoded_loss_weight > 0.0 or edge_loss_weight > 0.0 or highpass_loss_weight > 0.0)
+                        and predicted_x0 is not None
+                    ):
+                        decoded = vae.decode(predicted_x0)
+                        target_image = normalize_image(hr)
+                        decoded_loss = charbonnier_loss(decoded, target_image, eps=charbonnier_eps)
+                        edge_loss = sobel_edge_loss(decoded, target_image, eps=charbonnier_eps)
+                        highpass_loss = laplacian_loss(decoded, target_image, eps=charbonnier_eps)
+                    else:
+                        decoded_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                        edge_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                        highpass_loss = torch.zeros((), device=device, dtype=noise_loss.dtype)
+                    loss = (
+                        noise_loss_weight * noise_loss
+                        + x0_loss_weight * x0_loss
+                        + decoded_loss_weight * decoded_loss
+                        + edge_loss_weight * edge_loss
+                        + highpass_loss_weight * highpass_loss
+                    )
+                    scaled_loss = loss / grad_accum_steps
 
-            scaled_loss.backward()
+                scaled_loss.backward()
             if step % grad_accum_steps == 0:
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
 
-            if step % log_every == 0 or step == 1:
+            if is_main_process(rank) and (step % log_every == 0 or step == 1):
                 elapsed = max(1e-6, time.time() - last_log)
                 interval_steps = max(1, step - last_log_step)
                 last_log = time.time()
@@ -601,39 +693,43 @@ def main() -> None:
 
             should_eval = (
                 eval_enabled
-                and eval_loader is not None
                 and eval_every > 0
                 and (step % eval_every == 0 or (step == 1 and eval_run_at_start))
             )
             if should_eval:
-                metrics = evaluate(
-                    model,
-                    vae,
-                    condition_encoder,
-                    scheduler,
-                    eval_loader,
-                    device,
-                    dtype_name,
-                    train_condition_encoder,
-                    eval_timestep,
-                    eval_init_mode,
-                )
-                (eval_dir / f"step_{step:07d}_metrics.json").write_text(
-                    json.dumps({"step": step, "metrics": metrics}, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8",
-                )
-                print(
-                    f"eval step={step} noise_mse={metrics['eval/noise_mse']:.5f} "
-                    f"decoded_psnr={metrics['eval/decoded_psnr']:.2f}"
-                )
-                wandb_log(run, metrics, step=step)
-                metric_value = metrics[best_metric]
-                improved = metric_value > best_eval if best_mode == "max" else metric_value < best_eval
-                if improved:
-                    best_eval = metric_value
-                    save_checkpoint(checkpoints_dir / best_checkpoint, model, condition_encoder, optimizer, step, config)
+                barrier(distributed)
+                if is_main_process(rank) and eval_loader is not None:
+                    metrics = evaluate(
+                        unwrap_model(model),
+                        vae,
+                        unwrap_model(condition_encoder),
+                        scheduler,
+                        eval_loader,
+                        device,
+                        dtype_name,
+                        train_condition_encoder,
+                        eval_timestep,
+                        eval_init_mode,
+                    )
+                    (eval_dir / f"step_{step:07d}_metrics.json").write_text(
+                        json.dumps({"step": step, "metrics": metrics}, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    print(
+                        f"eval step={step} noise_mse={metrics['eval/noise_mse']:.5f} "
+                        f"decoded_psnr={metrics['eval/decoded_psnr']:.2f}"
+                    )
+                    wandb_log(run, metrics, step=step)
+                    metric_value = metrics[best_metric]
+                    improved = metric_value > best_eval if best_mode == "max" else metric_value < best_eval
+                    if improved:
+                        best_eval = metric_value
+                        save_checkpoint(checkpoints_dir / best_checkpoint, model, condition_encoder, optimizer, step, config)
+                barrier(distributed)
 
             if step % sample_every == 0 or step == 1:
+                barrier(distributed)
+            if is_main_process(rank) and (step % sample_every == 0 or step == 1):
                 sample_source = fixed_sample_batch if fixed_sample_batch is not None else batch
                 sample_init_mode = str(
                     config.get("logging", {}).get("samples", {}).get("init", eval_init_mode)
@@ -662,7 +758,7 @@ def main() -> None:
                             timestep,
                             sample_init_mode,
                         )
-                        sample_pred_noise = model(sample_noisy, timestep, sample_condition, sample_domain)
+                        sample_pred_noise = unwrap_model(model)(sample_noisy, timestep, sample_condition, sample_domain)
                         sample_x0 = scheduler.predict_x0_from_noise(sample_noisy, timestep, sample_pred_noise)
                         sample_decoded = vae.decode(sample_x0)
                     sample_count = sample_hr.shape[0]
@@ -699,17 +795,24 @@ def main() -> None:
                             },
                             step=step,
                         )
+            if step % sample_every == 0 or step == 1:
+                barrier(distributed)
 
             if step % save_every == 0 or step == max_steps:
-                save_checkpoint(checkpoints_dir / f"step_{step:07d}.pt", model, condition_encoder, optimizer, step, config)
-                save_checkpoint(checkpoints_dir / "latest.pt", model, condition_encoder, optimizer, step, config)
+                barrier(distributed)
+                if is_main_process(rank):
+                    save_checkpoint(checkpoints_dir / f"step_{step:07d}.pt", model, condition_encoder, optimizer, step, config)
+                    save_checkpoint(checkpoints_dir / "latest.pt", model, condition_encoder, optimizer, step, config)
+                barrier(distributed)
 
             if step >= max_steps:
                 break
+        epoch += 1
 
-    print(f"finished step={step}")
+    print_main(f"finished step={step}", rank)
     if run is not None:
         run.finish()
+    cleanup_distributed(distributed)
 
 
 if __name__ == "__main__":

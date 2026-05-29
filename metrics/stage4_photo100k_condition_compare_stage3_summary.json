@@ -1,0 +1,13 @@
+{
+  "baseline_dir": "/home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_photo100k_val100_t50_32step",
+  "baseline_label": "stage3_photo100k",
+  "candidate_dir": "/home/jwheojjang/scratch/sr-diffusion/runs/eval_diffusion_photo100k_stage4_condition_val100_t25_32step_final",
+  "candidate_label": "stage4_condition",
+  "count": 100,
+  "losses": 32,
+  "max_delta": 0.5238671902835321,
+  "mean_delta": 0.032725862626601696,
+  "median_delta": 0.05705631470070216,
+  "min_delta": -0.7551490697943635,
+  "wins": 68
+}
