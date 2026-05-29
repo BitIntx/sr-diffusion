@@ -4,6 +4,7 @@
 \usepackage{hyperref}
 \usepackage{booktabs}
 \usepackage{amsmath}
+\usepackage{float}
 
 \title{Vision-Only Latent Diffusion Super-Resolution without T2I Pretraining}
 \author{sr-diffusion contributors}
@@ -99,7 +100,7 @@ ringing, color shift, and banding variants. The latest XL condition encoder uses
 the \texttt{photo\_v3\_noise\_mix} degradation preset to emphasize
 denoise/sharpening behavior.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{ll}
 \toprule
@@ -124,7 +125,7 @@ The selected Stage 1 VAE checkpoint is
 \texttt{autoencoder\_photo10k\_b16\_eval\_online/checkpoints/best\_eval\_recon.pt}.
 It was selected at the 50k-step checkpoint with:
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lr}
 \toprule
@@ -142,7 +143,7 @@ eval/psnr & 40.19 \\
 The first photo100k scale-up completed deterministic latent pretraining,
 conditional diffusion, and condition-start fine-tuning.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{llll}
 \toprule
@@ -170,7 +171,7 @@ The \texttt{photo\_v2} degradation curriculum produced lower absolute PSNR than
 the earlier degradation because the task is stronger, but Stage 4 improved both
 the Stage 3 v2 model and bicubic baseline on the sampled validation set.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lr}
 \toprule
@@ -195,7 +196,7 @@ after the validation latent loss plateaued near 0.282. The XL condition encoder
 then completed 80k steps with a larger 500M-class full-path target. Its main
 checkpoints were:
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{llll}
 \toprule
@@ -213,7 +214,7 @@ images by decoding condition-only outputs through the selected VAE. This
 comparison used fixed samples, fixed seed, and the same
 \texttt{latent\_pretrain\_photo100k\_v3\_noise\_xl.yaml} configuration.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lrr}
 \toprule
@@ -239,7 +240,7 @@ the smaller Stage 4 v2 checkpoint. The loss combines a small noise term,
 latent \(\hat{x}_0\), decoded Charbonnier reconstruction, Sobel edge loss, and a
 highpass decoded loss.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{ll}
 \toprule
@@ -258,7 +259,7 @@ W\&B run & \url{https://wandb.ai/jwheo/sr-diffusion/runs/nog04fwr} \\
 The selected checkpoint was sampled on the fixed 100-image validation split
 with condition initialization, 32 DDIM steps, and start timestep 50:
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lr}
 \toprule
